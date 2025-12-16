@@ -12,7 +12,7 @@ A Titan aggregator integration for the Deriverse protocol.
 
 4. **Get a quote** using `quote` to calculate the expected outcome of a trade.
 
-### Quote Examples
+## Quote Examples
 
 For a Deriverse instrument pair with `asset: TOKEN_A` and `currency: TOKEN_B`:
 
@@ -43,10 +43,11 @@ pub enum Swap {
     },
 }
 ```
+`jupiter-amm-interface` copy contains extended `Swap` enum
 
 The instruction data can be built using `lib::from_swap`.
 
-### Usage Example
+## Usage Example
 ```rust
 fn build_key_account() -> KeyedAccount {
     let a_token_state = {
@@ -97,7 +98,7 @@ fn build_key_account() -> KeyedAccount {
      .unwrap();
 ```
 
-### Testing
+## Testing
 ```bash
 cargo integration_tests
 ```

@@ -30,16 +30,6 @@ For a Deriverse instrument pair with `asset: TOKEN_A` and `currency: TOKEN_B`:
   - `output_mint`: TOKEN_A
   - `amount`: `10 * 10^TOKEN_B.decimals`
 
-### Quote Precision
-
-- **Output precision**: `in_amount` matches `quote_params.amount` with ~1% variance due to rounding
-- **Market precision**: Expected quote precision compared to actual market is ~2.5% due to potential market movements
-
-## Features
-
-- Does not support `ExactOut`
-- Does not support `reverse_swap`
-
 ## Instruction Data
 
 The swap instruction includes a Deriverse variant:
@@ -106,10 +96,6 @@ fn build_key_account() -> KeyedAccount {
      })
      .unwrap();
 ```
-
-### Account Structure
-
-
 
 ### Testing
 ```bash

@@ -3,7 +3,7 @@ name = "jupiter-amm-interface"
 version = "0.6.0"
 license = "Apache-2.0"
 edition = "2021"
-description = "AMM interface to integrate a DEX into jupiter-core"
+description = "LOCAL COPY WITH EXTENDED SWAP of AMM interface to integrate a DEX into jupiter-core"
 keywords = ["solana", "jupiter", "aggregator"]
 
 [dependencies]

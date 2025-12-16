@@ -34,11 +34,12 @@ use crate::{
 };
 
 pub mod amm;
-#[cfg(test)]
-pub mod custom_sdk;
 pub mod helper;
 pub mod instrument;
 pub mod lines_linked_list;
+
+#[cfg(test)]
+pub mod custom_sdk;
 #[cfg(test)]
 pub mod tests;
 
@@ -48,7 +49,7 @@ pub mod program_id {
     use drv_models::new_types::version::Version;
     use solana_sdk::declare_id;
 
-    declare_id!("11111111111111111111111111111111");
+    declare_id!("DRVSpZ2YUYYKgZP8XtLhAGtT1zYSCKzeHfb4DgRnrgqD");
     pub const VERSION: Version = Version(0);
 }
 

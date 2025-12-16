@@ -989,9 +989,6 @@ pub mod tests {
                 .unwrap();
 
             let ix = builder.create_instruction();
-            // builder.amount = 2.0;
-            // builder.price = 11.0;
-            // let ix2 = builder.create_instruction();
 
             let mut tx = Transaction::new_with_payer(&[ix], Some(&CLIENT_A.pubkey()));
             tx.sign(

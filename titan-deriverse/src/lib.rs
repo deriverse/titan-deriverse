@@ -50,7 +50,7 @@ pub mod program_id {
     use solana_sdk::declare_id;
 
     declare_id!("DRVSpZ2YUYYKgZP8XtLhAGtT1zYSCKzeHfb4DgRnrgqD");
-    pub const VERSION: Version = Version(0);
+    pub const VERSION: Version = Version(1);
 }
 
 #[cfg(test)]
@@ -282,9 +282,7 @@ impl Amm for Deriverse {
                 amm_px = amm.get_reversed_amm_px(remaining_sum)?;
 
                 if line.is_none() {
-                    println!("Last line in order book");
                     if DeriverseAmm::partial_fill(amm_px, price, OrderSide::Ask) {
-                        println!("Partial fill");
                         traded_qty = amm.get_amm_qty(price, OrderSide::Ask)?;
                         traded_mints = amm.get_amm_sum(traded_qty, OrderSide::Ask)?;
                         if traded_qty == 0 || traded_mints == 0 {
@@ -500,7 +498,6 @@ impl Amm for Deriverse {
                 amm_px = amm.get_amm_px(remaining_qty, OrderSide::Bid)?;
 
                 if line.is_none() {
-                    println!("Last line in order book");
                     if DeriverseAmm::partial_fill(amm_px, price, OrderSide::Bid) {
                         traded_qty = amm.get_amm_qty(price, OrderSide::Bid)?;
                         traded_mints = amm.get_amm_sum(traded_qty, OrderSide::Bid)?;
@@ -614,7 +611,6 @@ impl Amm for Deriverse {
                                     .checked_add(fill_sum)
                                     .ok_or(anyhow!("Arithmetic Overflow"))?;
 
-                                println!("Fill qty: {} sum: {}", -remaining_qty, fill_sum);
                                 remaining_qty = 0;
                             }
                         }
@@ -641,7 +637,6 @@ impl Amm for Deriverse {
                             .checked_add(fill_sum)
                             .ok_or(anyhow!("Arithmetic Overflow"))?;
 
-                        println!("Fill qty: {} sum: {}", -line.qty, fill_sum);
                         continue;
                     }
 
@@ -696,13 +691,7 @@ impl Amm for Deriverse {
             bail!("Swap failed")
         }
 
-        println!(
-            "Client tokens: {}, Client mints {}",
-            client_tokens, client_mints
-        );
-
         if buy {
-            println!("Buy");
             Ok(Quote {
                 in_amount: (-1 * client_mints) as u64,
                 out_amount: client_tokens as u64,
@@ -711,7 +700,6 @@ impl Amm for Deriverse {
                 fee_pct: Decimal::from(fees_amount) / Decimal::from(-1 * client_mints),
             })
         } else {
-            println!("Sell");
             Ok(Quote {
                 in_amount: (-1 * client_tokens) as u64,
                 out_amount: client_mints as u64,

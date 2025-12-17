@@ -1045,9 +1045,6 @@ pub mod tests {
 
             println!("Result: {:?}", quote_result);
 
-            println!("Program id: {}", deriverse.a_program_id);
-            println!("Program id: {}", deriverse.b_program_id);
-
             let a_ata = get_associated_token_address_with_program_id(
                 &CLIENT_B.pubkey(),
                 &TOKEN_A,

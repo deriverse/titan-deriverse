@@ -481,7 +481,7 @@ impl Amm for Deriverse {
 
             client_mints -= total_fees;
             fees_amount = total_fees;
-        } else if price < px || order_book.cross(price, OrderSide::Bid) {
+        } else if !buy && (price < px || order_book.cross(price, OrderSide::Bid)) {
             let mut remaining_qty = quote_params.amount as i64;
             let mut sum = 0_i64;
             let mut total_fees = 0_i64;
@@ -641,7 +641,7 @@ impl Amm for Deriverse {
                     }
 
                     traded_qty = amm
-                        .get_amm_qty(line.price.min(price), OrderSide::Bid)?
+                        .get_amm_qty(line.price.max(price), OrderSide::Bid)?
                         .min(remaining_qty);
                     traded_mints = amm.get_amm_sum(traded_qty, OrderSide::Bid)?;
 

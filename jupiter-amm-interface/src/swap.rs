@@ -7,6 +7,11 @@ pub enum Side {
 /// This enum is a jupiter backend enum and does not map 1:1 to the onchain aggregator Swap enum
 #[derive(Clone, PartialEq, Debug)]
 pub enum Swap {
+    Deriverse {
+        side: Side,
+        instr_id: u32,
+        swap_fee_rate: f64,
+    },
     Saber,
     SaberAddDecimalsDeposit,
     SaberAddDecimalsWithdraw,
@@ -125,10 +130,6 @@ pub enum Swap {
     MeteoraDynamicBondingCurveSwapWithRemainingAccounts,
     TesseraV {
         side: Side,
-    },
-    Deriverse {
-        side: Side,
-        instr_id: u32,
     },
 }
 #[derive(Clone, PartialEq, Eq, Debug)]

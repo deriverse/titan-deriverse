@@ -1,5 +1,10 @@
 use drv_models::{
-    constants::seeds::DRVS_SEED, new_types::version::Version, state::types::account_type,
+    constants::{
+        candles::{CandleParams, CandleRegister},
+        seeds::DRVS_SEED,
+    },
+    new_types::version::Version,
+    state::types::account_type,
 };
 use solana_sdk::pubkey::Pubkey;
 
@@ -92,4 +97,18 @@ impl Helper for Pubkey {
         let (acc, _) = Pubkey::find_program_address(seeds, &program_id);
         acc
     }
+}
+
+pub const fn get_by_tag<const TAG: u32>(container: CandleRegister) -> CandleParams {
+    let mut i = 0;
+
+    while i < container.candles.len() {
+        if container.candles[i].tag == TAG {
+            return container.candles[i];
+        }
+        i += 1;
+    }
+
+    // unreachable code
+    container.candles[0]
 }

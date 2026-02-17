@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use bytemuck::{Pod, Zeroable, from_bytes};
 use drv_models::{
-    constants::{candles::CANDLES, voting::FEE_RATE_STEP},
+    constants::{MAX_SWAP_FEE_RATE, candles::CANDLES, voting::FEE_RATE_STEP},
     instruction_constants::{DrvInstruction, SwapInstruction},
     instruction_data::SwapData,
     new_types::instrument::InstrId,
@@ -244,13 +244,20 @@ impl Amm for Deriverse {
             &keyed_account.account.data.as_slice()[..std::mem::size_of::<InstrAccountHeader>()],
         ));
 
-        let mut accounts_ctx = ContextAccounts::build(instr_header.as_ref());
+        let accounts_ctx = ContextAccounts::build(instr_header.as_ref());
 
-        let params: ParamsWrapper = if let Some(ref params) = keyed_account.params {
+        let mut params: ParamsWrapper = if let Some(ref params) = keyed_account.params {
             from_value(params.clone())?
         } else {
             bail!("Need params were not provided in KeydAccount");
         };
+
+        if let Some(ref mut swap_ref_params) = params.swap_ref_params {
+            swap_ref_params.fee_rate_factor = swap_ref_params
+                .fee_rate_factor
+                .min(MAX_SWAP_FEE_RATE)
+                .max(0.0);
+        }
 
         Ok(Deriverse {
             instr_header,

@@ -43,7 +43,7 @@ pub enum Swap {
     },
 }
 ```
-`titan-amm-interface` copy contains extended `Swap` enum
+`jupiter-amm-interface` copy contains extended `Swap` enum
 
 The instruction data can be built using `lib::from_swap`.
 
@@ -106,11 +106,7 @@ The **Swap Referral Program** allows aggregators to earn fees from each swap ins
 - `fee_rate_factor` — must be less than `0.0002` (automatically aligned by the platform).  
 - `fees_taker_ata` — the associated token account of the fee taker.  
 
-All parameters are passed during **Deriverse initialization** via the `KeydAccount.params` field.  
-
-Currently, the **`jupiter-amm-interface`** does not support a valid `params` field. However, such functionality exists in the **`jupiter-amm-interface`**. To implement this behavior, you’ll need to include the **`serde`** and **`serde_json`** dependencies.  
-
-If your design allows it, the `fees_taker_authority` parameters can be defined as constants to remove external dependencies.
+All parameters are passed during **Deriverse initialization** via the `KeydAccount.params` field.    
 
 ### Dynamic Account Count
 

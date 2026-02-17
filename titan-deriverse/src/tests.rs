@@ -1072,7 +1072,7 @@ pub mod tests {
             #[test]
             fn partial_fill_sell_with_swap_fees() {
                 let swap_ref_params = SwapReferralParams {
-                    fee_rate_factor: 0.01,
+                    fee_rate_factor: 0.0002,
                     client_mint_token_acc: Pubkey::new_unique(),
                 };
 

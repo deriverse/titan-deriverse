@@ -1,6 +1,7 @@
 use bytemuck::Zeroable;
 use drv_models::{
-    constants::{DF, instructions::DrvInstruction},
+    constants::DF,
+    instruction_constants::{DrvInstruction, NewSpotOrderInstruction},
     instruction_data::NewSpotOrderData,
     state::{
         instrument::InstrAccountHeader,
@@ -241,7 +242,7 @@ impl Context for NewSpotOrderContext {
                 is_writable: false,
             },
             AccountMeta {
-                pubkey: solana_sdk::system_program::id(),
+                pubkey: solana_system_interface::program::id(),
                 is_signer: false,
                 is_writable: false,
             },
@@ -250,7 +251,7 @@ impl Context for NewSpotOrderContext {
         let qty = (amount * get_dec_factor((a_token_state.mask & 0xFF) as u8) as f64) as i64;
 
         let instruction_data = NewSpotOrderData {
-            tag: drv_models::constants::instructions::NewSpotOrderInstruction::INSTRUCTION_NUMBER,
+            tag: NewSpotOrderInstruction::INSTRUCTION_NUMBER,
             order_type: OrderType::Limit as u8,
             instr_id: instr_state.instr_id,
             amount: qty,

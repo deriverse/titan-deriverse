@@ -1,6 +1,6 @@
 use bytemuck::Zeroable;
 use drv_models::{
-    constants::instructions::DrvInstruction,
+    instruction_constants::{DepositInstruction, DrvInstruction},
     instruction_data::DepositData,
     state::{token::TokenState, types::account_type::ROOT},
 };
@@ -73,7 +73,7 @@ impl Context for DepositContext {
 
         let slot = rpc.get_slot()?;
 
-        let lut = solana_sdk::address_lookup_table::instruction::create_lookup_table(
+        let lut = solana_address_lookup_table_interface::instruction::create_lookup_table(
             signer, signer, slot,
         );
 
@@ -175,7 +175,7 @@ impl Context for DepositContext {
                 is_writable: true,
             });
             accounts.push(AccountMeta {
-                pubkey: solana_sdk::address_lookup_table::program::id(),
+                pubkey: solana_address_lookup_table_interface::program::id(),
                 is_signer: false,
                 is_writable: false,
             });
@@ -184,7 +184,7 @@ impl Context for DepositContext {
         let qty = amount * get_dec_factor((token_state.mask & 0xFF) as u8);
 
         let instruction_data = DepositData {
-            tag: drv_models::constants::instructions::DepositInstruction::INSTRUCTION_NUMBER,
+            tag: DepositInstruction::INSTRUCTION_NUMBER,
             token_id: token_state.id,
             amount: qty,
             deposit_all: *deposit_all as u8,

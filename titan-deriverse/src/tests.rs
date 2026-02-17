@@ -5,10 +5,11 @@ pub mod tests {
     pub mod integration_tests {
         use anyhow::Result;
 
-        use bytemuck::{bytes_of, Pod, Zeroable};
+        use bytemuck::{Pod, Zeroable, bytes_of};
         use drv_models::{
-            constants::{nulls::NULL_ORDER, trading_limitations::MAX_PRICE, DF},
+            constants::{DF, nulls::NULL_ORDER, trading_limitations::MAX_PRICE},
             state::{
+                candles::CandlesAccountHeader,
                 community_account_header::CommunityAccountHeader,
                 instrument::InstrAccountHeader,
                 spots::spot_account_header::SpotTradeAccountHeaderNonGen,
@@ -23,11 +24,11 @@ pub mod tests {
         use solana_sdk::{account::Account, pubkey::Pubkey};
 
         use crate::{
+            Deriverse, InstructionBuilderParams, ParamsWrapper, SwapReferralParams,
             helper::get_dec_factor,
             lines_linked_list::Lines,
             orders_linked_list::Orders,
             tests::tests::integration_tests::config::{TOKEN_A, TOKEN_B},
-            Deriverse, InstructionBuilderParams, ParamsWrapper, SwapReferralParams,
         };
 
         pub mod config {
@@ -626,6 +627,14 @@ pub mod tests {
                 default_account_with_data(bytes_of(&TokenState::zeroed()).to_vec()),
             );
 
+            if let Some(candles) = deriverse.accounts_ctx.candles {
+                let header = CandlesAccountHeader::<0>::zeroed();
+                let header = bytes_of(&header);
+                accounts_map.insert(candles.0, default_account_with_data(header.to_vec()));
+                accounts_map.insert(candles.1, default_account_with_data(header.to_vec()));
+                accounts_map.insert(candles.2, default_account_with_data(header.to_vec()));
+            }
+
             let mut new_deriverse = Deriverse::from_keyed_account(
                 &build_key_account(InstructionBuilderParams { ata_init: false }).unwrap(),
                 &AmmContext {
@@ -1037,6 +1046,14 @@ pub mod tests {
                     default_account_with_object(deriverse.instr_header.as_ref()),
                 );
 
+                if let Some(candles) = deriverse.accounts_ctx.candles {
+                    let header = CandlesAccountHeader::<0>::zeroed();
+                    let header = bytes_of(&header);
+                    accounts_map.insert(candles.0, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.1, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.2, default_account_with_data(header.to_vec()));
+                }
+
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account(instruction_builder_params).unwrap(),
                     &AmmContext {
@@ -1227,6 +1244,14 @@ pub mod tests {
                     deriverse.accounts_ctx.instr_header,
                     default_account_with_object(deriverse.instr_header.as_ref()),
                 );
+
+                if let Some(candles) = deriverse.accounts_ctx.candles {
+                    let header = CandlesAccountHeader::<0>::zeroed();
+                    let header = bytes_of(&header);
+                    accounts_map.insert(candles.0, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.1, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.2, default_account_with_data(header.to_vec()));
+                }
 
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account(InstructionBuilderParams { ata_init: false }).unwrap(),
@@ -1615,6 +1640,14 @@ pub mod tests {
                     default_account_with_object(deriverse.instr_header.as_ref()),
                 );
 
+                if let Some(candles) = deriverse.accounts_ctx.candles {
+                    let header = CandlesAccountHeader::<0>::zeroed();
+                    let header = bytes_of(&header);
+                    accounts_map.insert(candles.0, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.1, default_account_with_data(header.to_vec()));
+                    accounts_map.insert(candles.2, default_account_with_data(header.to_vec()));
+                }
+
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account(InstructionBuilderParams { ata_init: false }).unwrap(),
                     &AmmContext {
@@ -1706,7 +1739,7 @@ pub mod tests {
         use drv_models::state::{
             client_primary_account_header::ClientPrimaryAccountHeader,
             token::TokenState,
-            types::account_type::{INSTR, SPOT_15M_CANDLES, SPOT_1M_CANDLES, SPOT_DAY_CANDLES},
+            types::account_type::{INSTR, SPOT_1M_CANDLES, SPOT_15M_CANDLES, SPOT_DAY_CANDLES},
         };
         use jupiter_amm_interface::{
             Amm, AmmContext, ClockRef, KeyedAccount, SwapAndAccountMetas, SwapParams,
@@ -1724,6 +1757,7 @@ pub mod tests {
         use spl_associated_token_account::get_associated_token_address_with_program_id;
 
         use crate::{
+            Deriverse, InstructionBuilderParams, ParamsWrapper, SwapReferralParams,
             custom_sdk::{
                 deposit::{DepositBuildContext, DepositContext},
                 extend_candles::ExtendCandlesBuilder,
@@ -1731,10 +1765,9 @@ pub mod tests {
                 traits::{Context, InstructionBuilder},
             },
             from_swap,
-            helper::{get_dec_factor, Helper},
+            helper::{Helper, get_dec_factor},
             program_id,
             tests::tests::rpc_tests::config::{TOKEN_A, TOKEN_B},
-            Deriverse, InstructionBuilderParams, ParamsWrapper, SwapReferralParams,
         };
 
         static RPC: Lazy<RpcClient> = Lazy::new(|| {
@@ -2025,6 +2058,11 @@ pub mod tests {
                     source_token_account: a_ata,
                     destination_token_account: b_ata,
                     token_transfer_authority: CLIENT_B.pubkey(),
+                    swap_mode: jupiter_amm_interface::SwapMode::ExactIn,
+                    out_amount: 0,
+                    quote_mint_to_referrer: None,
+                    jupiter_program_id: &Pubkey::new_unique(),
+                    missing_dynamic_accounts_as_default: false,
                 })
                 .unwrap();
 
@@ -2178,6 +2216,11 @@ pub mod tests {
                     source_token_account: a_ata,
                     destination_token_account: b_ata,
                     token_transfer_authority: CLIENT_C.pubkey(),
+                    swap_mode: jupiter_amm_interface::SwapMode::ExactIn,
+                    out_amount: 0,
+                    quote_mint_to_referrer: None,
+                    jupiter_program_id: &Pubkey::new_unique(),
+                    missing_dynamic_accounts_as_default: false,
                 })
                 .unwrap();
 
@@ -2296,7 +2339,7 @@ pub mod tests {
                 false,
                 false,
                 Some(SwapReferralParams {
-                    fee_rate_factor: 1.0,
+                    fee_rate_factor: 10.0,
                     client_mint_token_acc: ref_taker_ata,
                 }),
             );
@@ -2395,6 +2438,11 @@ pub mod tests {
                     source_token_account: a_ata,
                     destination_token_account: b_ata,
                     token_transfer_authority: CLIENT_B.pubkey(),
+                    swap_mode: jupiter_amm_interface::SwapMode::ExactIn,
+                    out_amount: 0,
+                    quote_mint_to_referrer: None,
+                    jupiter_program_id: &Pubkey::new_unique(),
+                    missing_dynamic_accounts_as_default: false,
                 })
                 .unwrap();
 

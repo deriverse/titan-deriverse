@@ -1,5 +1,5 @@
-use anyhow::{anyhow, bail, Result};
-use bytemuck::{from_bytes, Pod, Zeroable};
+use anyhow::{Result, anyhow, bail};
+use bytemuck::{Pod, Zeroable, from_bytes};
 use drv_models::{
     constants::{candles::CANDLES, voting::FEE_RATE_STEP},
     instruction_constants::{DrvInstruction, SwapInstruction},
@@ -11,24 +11,27 @@ use drv_models::{
         instrument::InstrAccountHeader,
         token::TokenState,
         types::{
+            OrderSide,
             account_type::{
-                COMMUNITY, INSTR, ROOT, SPOT_15M_CANDLES, SPOT_1M_CANDLES, SPOT_ASKS_TREE,
-                SPOT_ASK_ORDERS, SPOT_BIDS_TREE, SPOT_BID_ORDERS, SPOT_CLIENT_INFOS,
+                COMMUNITY, INSTR, ROOT, SPOT_1M_CANDLES, SPOT_15M_CANDLES, SPOT_ASK_ORDERS,
+                SPOT_ASKS_TREE, SPOT_BID_ORDERS, SPOT_BIDS_TREE, SPOT_CLIENT_INFOS,
                 SPOT_CLIENT_INFOS2, SPOT_DAY_CANDLES, SPOT_LINES,
             },
-            OrderSide,
         },
     },
 };
 
-use jupiter_amm_interface::{AccountMap, Amm, Quote, Side, Swap, SwapAndAccountMetas, SwapParams};
+use jupiter_amm_interface::{
+    AccountMap, Amm, Quote, Side, Swap, SwapAndAccountMetas, SwapMode, SwapParams,
+};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::from_value;
 use solana_sdk::{account::Account, instruction::AccountMeta, pubkey::Pubkey};
 
 use crate::{
     amm::DeriverseAmm,
-    helper::{get_by_tag, Helper},
+    helper::{Helper, get_by_tag},
     instrument::OffChainInstrAccountHeader,
     order_book::OrderBook,
 };
@@ -384,6 +387,11 @@ impl Amm for Deriverse {
             ..
         } = self;
 
+        // reversed swap
+        if quote_params.swap_mode == SwapMode::ExactOut {
+            bail!("Exact out is not supported")
+        }
+
         let mut amm = amm.clone();
 
         let buy = b_token_state.address == quote_params.input_mint;
@@ -392,17 +400,14 @@ impl Amm for Deriverse {
         let price = {
             let max_diff = px >> 3;
 
-            if buy {
-                px + max_diff
-            } else {
-                px - max_diff
-            }
+            if buy { px + max_diff } else { px - max_diff }
         };
 
         let fee_rate = instr_header.day_volatility * fee_rate_factor;
 
         let mut client_tokens: i64 = 0;
         let mut client_mints: i64 = 0;
+        let mut fees_amount: i64 = 0;
 
         if buy && (price > px || order_book.cross(price, OrderSide::Ask)) {
             let input_sum = (quote_params.amount as f64
@@ -655,6 +660,7 @@ impl Amm for Deriverse {
             };
 
             client_mints -= total_fees + additional_fees;
+            fees_amount = total_fees + additional_fees;
         } else if !buy && (price < px || order_book.cross(price, OrderSide::Bid)) {
             let mut remaining_qty = quote_params.amount as i64;
             let mut sum = 0_i64;
@@ -873,6 +879,7 @@ impl Amm for Deriverse {
             };
 
             client_mints -= total_fees + additional_fees;
+            fees_amount = total_fees + additional_fees;
         }
 
         if client_tokens == 0 || client_mints == 0 {
@@ -883,11 +890,17 @@ impl Amm for Deriverse {
             Ok(Quote {
                 in_amount: (-1 * client_mints) as u64,
                 out_amount: client_tokens as u64,
+                fee_amount: fees_amount as u64,
+                fee_mint: b_token_state.address,
+                fee_pct: Decimal::from(fees_amount) / Decimal::from(-1 * client_mints),
             })
         } else {
             Ok(Quote {
                 in_amount: (-1 * client_tokens) as u64,
                 out_amount: client_mints as u64,
+                fee_amount: fees_amount as u64,
+                fee_mint: b_token_state.address,
+                fee_pct: Decimal::from(fees_amount) / Decimal::from(client_mints),
             })
         }
     }

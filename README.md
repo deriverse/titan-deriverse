@@ -1,6 +1,6 @@
-# Titan-Deriverse Integration
+# Jupiter-Deriverse Integration
 
-A Titan aggregator integration for the Deriverse protocol.
+A Jupiter aggregator integration for the Deriverse protocol.
 
 ## Internal State Construction
 
@@ -98,6 +98,26 @@ fn build_key_account() -> KeyedAccount {
      .unwrap();
 ```
 
+### Swap Referral Program
+
+The **Swap Referral Program** allows aggregators to earn fees from each swap instruction they originate.  
+
+**Parameters:**
+- `fee_rate_factor` — must be less than `0.0002` (automatically aligned by the platform).  
+- `fees_taker_ata` — the associated token account of the fee taker.  
+
+All parameters are passed during **Deriverse initialization** via the `KeydAccount.params` field.    
+
+### Dynamic Account Count
+
+The minimum number of accounts required for a swap instruction has been reduced. The size and sequence of account metas can now vary based on input parameters. See `get_swap_and_account_metas` for details.
+
+### Is Active
+
+The system program account has been removed from the integration. The design allows the platform to prohibit allocations when needed. 
+
+**Common error:** non-preallocated candle buffers — allocate them via `extend_candles` if required.
+
 ## Testing
 ```bash
 cargo integration_tests
@@ -108,3 +128,4 @@ Execute only off chain tests
 cargo test
 ```
 Execute all tests
+# jupiter-deriverse

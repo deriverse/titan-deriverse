@@ -1647,6 +1647,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "jupiter-deriverse"
+version = "0.1.0"
+dependencies = [
+ "ahash 0.8.12",
+ "anyhow",
+ "bytemuck",
+ "drv-models",
+ "jupiter-amm-interface",
+ "once_cell",
+ "rust_decimal",
+ "serde",
+ "serde_json",
+ "solana-address-lookup-table-interface",
+ "solana-client",
+ "solana-sdk",
+ "solana-system-interface 3.0.0",
+ "spl-associated-token-account",
+ "spl-token-2022-interface",
+ "spl-token-interface",
+]
+
+[[package]]
 name = "k256"
 version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5054,28 +5076,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "titan-deriverse"
-version = "0.1.0"
-dependencies = [
- "ahash 0.8.12",
- "anyhow",
- "bytemuck",
- "drv-models",
- "jupiter-amm-interface",
- "once_cell",
- "rust_decimal",
- "serde",
- "serde_json",
- "solana-address-lookup-table-interface",
- "solana-client",
- "solana-sdk",
- "solana-system-interface 3.0.0",
- "spl-associated-token-account",
- "spl-token-2022-interface",
- "spl-token-interface",
-]
 
 [[package]]
 name = "tokio"

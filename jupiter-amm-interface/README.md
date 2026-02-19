@@ -1,4 +1,4 @@
-# Titan AMM interface
+# Jupiter AMM interface
 
 Rust crate for the `Amm` trait to integrate with dflow-core.
 

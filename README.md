@@ -1,6 +1,6 @@
-# Titan-Deriverse Integration
+# Jupiter-Deriverse Integration
 
-A Titan aggregator integration for the Deriverse protocol.
+A Jupiter aggregator integration for the Deriverse protocol.
 
 ## Internal State Construction
 
@@ -128,4 +128,4 @@ Execute only off chain tests
 cargo test
 ```
 Execute all tests
-# titan-deriverse
+# jupiter-deriverse

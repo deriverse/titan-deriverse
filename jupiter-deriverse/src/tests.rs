@@ -1777,11 +1777,11 @@ pub mod tests {
         });
 
         static CLIENT_A: Lazy<Keypair> =
-            Lazy::new(|| Keypair::read_from_file("../keys/client-a.json").unwrap());
+            Lazy::new(|| Keypair::read_from_file("../keys/jupiter-client-a.json").unwrap());
         static CLIENT_B: Lazy<Keypair> =
-            Lazy::new(|| Keypair::read_from_file("../keys/client-b.json").unwrap());
+            Lazy::new(|| Keypair::read_from_file("../keys/jupiter-client-b.json").unwrap());
         static CLIENT_C: Lazy<Keypair> =
-            Lazy::new(|| Keypair::read_from_file("../keys/client-c.json").unwrap());
+            Lazy::new(|| Keypair::read_from_file("../keys/jupiter-client-c.json").unwrap());
 
         pub mod config {
             use solana_sdk::pubkey::Pubkey;

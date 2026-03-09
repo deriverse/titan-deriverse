@@ -6,7 +6,7 @@ use drv_models::{
     new_types::version::Version,
     state::types::account_type,
 };
-use solana_sdk::pubkey::Pubkey;
+use solana_pubkey::Pubkey;
 
 use crate::program_id::{self, VERSION};
 

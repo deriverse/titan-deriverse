@@ -5,10 +5,8 @@ use drv_models::{
     state::{token::TokenState, types::account_type::ROOT},
 };
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-};
+use solana_instruction::{AccountMeta, Instruction};
+use solana_pubkey::Pubkey;
 
 use spl_associated_token_account::get_associated_token_address_with_program_id;
 
@@ -181,7 +179,7 @@ impl Context for DepositContext {
             });
         }
 
-        let qty = amount * get_dec_factor((token_state.mask & 0xFF) as u8);
+        let qty = amount * get_dec_factor(token_state.mask.decimals());
 
         let instruction_data = DepositData {
             tag: DepositInstruction::INSTRUCTION_NUMBER,

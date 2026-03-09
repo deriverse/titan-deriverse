@@ -16,10 +16,8 @@ use drv_models::{
         },
     },
 };
-use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-};
+use solana_instruction::{AccountMeta, Instruction};
+use solana_pubkey::Pubkey;
 
 use crate::{
     custom_sdk::traits::{BuildContext, Context},
@@ -128,7 +126,7 @@ impl Context for NewSpotOrderContext {
         }))
     }
 
-    fn create_instruction(&self) -> solana_sdk::instruction::Instruction {
+    fn create_instruction(&self) -> Instruction {
         let NewSpotOrderContext {
             signer,
             root,
@@ -248,7 +246,7 @@ impl Context for NewSpotOrderContext {
             },
         ];
 
-        let qty = (amount * get_dec_factor((a_token_state.mask & 0xFF) as u8) as f64) as i64;
+        let qty = (amount * get_dec_factor(a_token_state.mask.decimals()) as f64) as i64;
 
         let instruction_data = NewSpotOrderData {
             tag: NewSpotOrderInstruction::INSTRUCTION_NUMBER,

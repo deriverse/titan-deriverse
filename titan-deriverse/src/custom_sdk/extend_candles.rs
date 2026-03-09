@@ -2,10 +2,9 @@ use drv_models::{
     instruction_constants::{DrvInstruction, ExtendCandles},
     state::types::account_type::ROOT,
 };
-use solana_sdk::{
-    message::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-};
+
+use solana_instruction::{AccountMeta, Instruction};
+use solana_pubkey::Pubkey;
 
 use crate::{helper::Helper, program_id};
 

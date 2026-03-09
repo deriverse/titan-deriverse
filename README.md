@@ -1,6 +1,6 @@
-# Titan-Deriverse Integration
+# Jupiter-Deriverse Integration
 
-A Titan aggregator integration for the Deriverse protocol.
+A Jupiter aggregator integration for the Deriverse protocol.
 
 ## Internal State Construction
 
@@ -86,7 +86,7 @@ fn build_key_account() -> KeyedAccount {
  
  deriverse.update(&accounts_map).unwrap();
  
- let in_amount = get_dec_factor((deriverse.b_token_state.mask & 0xFF) as u8) as u64;
+ let in_amount = get_dec_factor(deriverse.b_token_state.mask.decimals()) as u64;
 
  let quote_result = deriverse
      .quote(&jupiter_amm_interface::QuoteParams {
@@ -128,4 +128,4 @@ Execute only off chain tests
 cargo test
 ```
 Execute all tests
-# titan-deriverse
+# jupiter-deriverse

@@ -1,8 +1,10 @@
-use anyhow::{Result, anyhow, bail};
 use drv_models::{
     constants::trading_limitations::MAX_SUM,
     state::{instrument::InstrAccountHeader, types::OrderSide},
 };
+use jupiter_amm_interface::AmmError;
+
+type Result<T> = std::result::Result<T, AmmError>;
 
 #[derive(Clone, Default, PartialEq, Debug)]
 pub struct DeriverseAmm {
@@ -28,7 +30,7 @@ impl DeriverseAmm {
         let sum = (a as f64 * b as f64) * self.rdf;
 
         if sum.is_sign_negative() || sum.is_nan() || sum > MAX_SUM {
-            bail!("Arithmetic overflow")
+            return Err("Arithmetic overflow".into());
         }
 
         Ok(sum as i64)
@@ -38,12 +40,12 @@ impl DeriverseAmm {
         Ok(match side {
             OrderSide::Bid => ((((self.k as f64 * self.df / price as f64).sqrt()) as i64)
                 .checked_sub(self.a_tokens))
-            .ok_or(anyhow!("Arithmetic overflow"))?
+            .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?
             .max(0),
             OrderSide::Ask => (self
                 .a_tokens
                 .checked_sub(((self.k as f64 * self.df / price as f64).sqrt()) as i64))
-            .ok_or(anyhow!("Arithmetic overflow"))?
+            .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?
             .max(0),
         })
     }
@@ -54,7 +56,7 @@ impl DeriverseAmm {
                 let new_tokens = (self
                     .a_tokens
                     .checked_add(q)
-                    .ok_or(anyhow!("Arithmetic overflow"))?)
+                    .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?)
                     as i128;
                 (((self.k as f64) * self.df) / (new_tokens * new_tokens) as f64) as i64
             }
@@ -65,7 +67,7 @@ impl DeriverseAmm {
                     let new_tokens = (self
                         .a_tokens
                         .checked_sub(q)
-                        .ok_or(anyhow!("Arithmetic overflow"))?)
+                        .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?)
                         as i128;
                     (((self.k as f64) * self.df) / (new_tokens * new_tokens) as f64) as i64
                 }
@@ -81,7 +83,7 @@ impl DeriverseAmm {
                 } else {
                     (self.b_tokens as i128)
                         .checked_sub(self.k / (self.a_tokens + traded_qty) as i128)
-                        .ok_or(anyhow!("Arithmetic overflow"))?
+                        .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?
                         .max(0) as i64
                 }
             }
@@ -92,7 +94,7 @@ impl DeriverseAmm {
                 } else {
                     (self.k / new_tokens as i128)
                         .checked_sub(self.b_tokens as i128)
-                        .ok_or(anyhow!("Arithmetic overflow"))?
+                        .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?
                         .max(0) as i64
                 }
             }
@@ -106,7 +108,8 @@ impl DeriverseAmm {
             let new_crncy = (self
                 .b_tokens
                 .checked_add(sum)
-                .ok_or(anyhow!("Arithmetic overflow"))?) as i128;
+                .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?)
+                as i128;
             Ok((((new_crncy * new_crncy) as f64 * self.df) / self.k as f64) as i64)
         }
     }
@@ -118,7 +121,8 @@ impl DeriverseAmm {
             let new_crncy = (self
                 .b_tokens
                 .checked_add(traded_sum)
-                .ok_or(anyhow!("Arithmetic overflow"))?) as i128;
+                .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?)
+                as i128;
             Ok(self.a_tokens - (self.k / new_crncy) as i64)
         }
     }
@@ -130,7 +134,7 @@ impl DeriverseAmm {
             Ok(-((self
                 .b_tokens
                 .checked_sub(((self.k as f64 * price as f64 / self.df).sqrt()) as i64))
-            .ok_or(anyhow!("Arithmetic overflow"))?)
+            .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?)
             .max(0))
         }
     }

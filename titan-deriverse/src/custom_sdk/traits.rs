@@ -1,5 +1,5 @@
 use solana_client::rpc_client::RpcClient;
-use solana_sdk::instruction::Instruction;
+use solana_instruction::Instruction;
 
 pub trait BuildContext {}
 

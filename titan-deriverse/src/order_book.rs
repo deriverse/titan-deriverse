@@ -1,4 +1,3 @@
-use anyhow::bail;
 use bytemuck::cast_slice;
 use drv_models::{
     constants::{nulls::NULL_ORDER, trading_limitations::MAX_SUM},
@@ -8,12 +7,15 @@ use drv_models::{
         types::{OrderSide, PxOrders},
     },
 };
-use solana_sdk::account::Account;
+use jupiter_amm_interface::AmmError;
+use solana_account::ReadableAccount;
 
 use crate::{
     lines_linked_list::{Lines, LinesIter, LinesSugar},
     orders_linked_list::{Orders, OrdersSugar},
 };
+
+type Result<T> = std::result::Result<T, AmmError>;
 
 #[derive(Clone, Default, Debug, PartialEq)]
 pub struct OrderBook {
@@ -29,31 +31,31 @@ pub struct OrderBook {
 impl OrderBook {
     pub fn new(
         instr_header: &InstrAccountHeader,
-        lines_acc: &Account,
-        bid_orders: &Account,
-        ask_orders: &Account,
+        lines_acc: impl ReadableAccount,
+        bid_orders: impl ReadableAccount,
+        ask_orders: impl ReadableAccount,
     ) -> Self {
-        let lines = if lines_acc.data.len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
+        let lines = if lines_acc.data().len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
             vec![]
         } else {
             Lines::new_lines(cast_slice(
-                &lines_acc.data.as_slice()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
+                &lines_acc.data()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
             ))
         };
 
-        let bid_orders = if bid_orders.data.len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
+        let bid_orders = if bid_orders.data().len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
             vec![]
         } else {
             Orders::new_orders(cast_slice(
-                &bid_orders.data.as_slice()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
+                &bid_orders.data()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
             ))
         };
 
-        let ask_orders = if ask_orders.data.len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
+        let ask_orders = if ask_orders.data().len() <= SPOT_TRADE_ACCOUNT_HEADER_SIZE {
             vec![]
         } else {
             Orders::new_orders(cast_slice(
-                &ask_orders.data.as_slice()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
+                &ask_orders.data()[SPOT_TRADE_ACCOUNT_HEADER_SIZE..],
             ))
         };
 
@@ -108,11 +110,11 @@ impl OrderBook {
         }
     }
 
-    pub fn trade_sum(&self, a: i64, b: i64) -> anyhow::Result<i64> {
+    pub fn trade_sum(&self, a: i64, b: i64) -> Result<i64> {
         let sum = (a as f64 * b as f64) * self.rdf;
 
         if sum.is_sign_negative() || sum.is_nan() || sum > MAX_SUM {
-            bail!("Arithmetic overflow")
+            return Err("Arithmetic overflow".into());
         }
 
         Ok(sum as i64)
@@ -143,7 +145,7 @@ impl OrderBook {
         mut remaining_qty: i64,
         fee_rate: f64,
         side: OrderSide,
-    ) -> anyhow::Result<(i64, i64, i64)> {
+    ) -> Result<(i64, i64, i64)> {
         let px = line.price;
         let orders = match side {
             OrderSide::Bid => &self.bid_orders,

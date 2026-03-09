@@ -1,21 +1,28 @@
-use anyhow::{anyhow, Context, Error, Result};
-use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use solana_account_decoder::{encode_ui_account, UiAccount, UiAccountEncoding};
-use solana_sdk::clock::Clock;
-use std::collections::HashSet;
+use {
+    rust_decimal::Decimal,
+    serde::{Deserialize, Serialize},
+    solana_account::{Account, ReadableAccount},
+    solana_clock::Clock,
+    solana_instruction::AccountMeta,
+    solana_program_error::ProgramError,
+    solana_pubkey::Pubkey,
+    std::{
+        collections::{HashMap, HashSet},
+        hash::BuildHasher,
+        io,
+        ops::Deref,
+        str::FromStr,
+        sync::{
+            atomic::{AtomicI64, AtomicU64, Ordering},
+            Arc,
+        },
+    },
+    thiserror::Error,
+};
 
-use std::sync::atomic::{AtomicI64, AtomicU64};
-use std::sync::Arc;
-use std::{collections::HashMap, convert::TryFrom, str::FromStr};
-mod custom_serde;
+pub mod custom_serde;
 mod swap;
-use custom_serde::field_as_string;
 pub use swap::{AccountsType, RemainingAccountsInfo, RemainingAccountsSlice, Side, Swap};
-
-/// An abstraction in order to share reserve mints and necessary data
-use solana_sdk::{account::Account, instruction::AccountMeta, pubkey::Pubkey};
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Default, Debug)]
 pub enum SwapMode {
@@ -24,16 +31,27 @@ pub enum SwapMode {
     ExactOut,
 }
 
-impl FromStr for SwapMode {
-    type Err = Error;
+#[derive(Debug, Error)]
+#[error("{0} is not a valid SwapMode")]
+pub struct SwapModeParseError(String);
 
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
+impl FromStr for SwapMode {
+    type Err = SwapModeParseError;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        match value {
             "ExactIn" => Ok(SwapMode::ExactIn),
             "ExactOut" => Ok(SwapMode::ExactOut),
-            _ => Err(anyhow!("{} is not a valid SwapMode", s)),
+            _ => Err(SwapModeParseError(value.to_string())),
         }
     }
+}
+
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
+pub enum FeeMode {
+    #[default]
+    Normal,
+    Ultra,
 }
 
 #[derive(Debug)]
@@ -42,6 +60,7 @@ pub struct QuoteParams {
     pub input_mint: Pubkey,
     pub output_mint: Pubkey,
     pub swap_mode: SwapMode,
+    pub fee_mode: FeeMode,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -65,6 +84,10 @@ pub struct SwapParams<'a, 'b> {
     pub destination_token_account: Pubkey,
     /// This can be the user or the program authority over the source_token_account.
     pub token_transfer_authority: Pubkey,
+    /// The actual user doing the swap.
+    pub user: Pubkey,
+    /// The payer for extra SOL that is required for needed accounts in the swap.
+    pub payer: Pubkey,
     pub quote_mint_to_referrer: Option<&'a QuoteMintToReferrer>,
     pub jupiter_program_id: &'b Pubkey,
     /// Instead of returning the relevant Err, replace dynamic accounts with the default Pubkey
@@ -85,50 +108,96 @@ pub struct SwapAndAccountMetas {
     pub account_metas: Vec<AccountMeta>,
 }
 
-pub type AccountMap = HashMap<Pubkey, Account, ahash::RandomState>;
+#[derive(Debug, Error)]
+#[error("Could not find address: {0}")]
+pub struct AccountNotFoundError(Pubkey);
 
-pub fn try_get_account_data<'a>(account_map: &'a AccountMap, address: &Pubkey) -> Result<&'a [u8]> {
-    account_map
-        .get(address)
-        .map(|account| account.data.as_slice())
-        .with_context(|| format!("Could not find address: {address}"))
+pub trait AccountProvider {
+    fn get(&self, pubkey: &Pubkey) -> Option<impl ReadableAccount + use<'_, Self>>;
+
+    fn try_get(&self, pubkey: &Pubkey) -> Result<impl ReadableAccount, AccountNotFoundError> {
+        self.get(pubkey).ok_or(AccountNotFoundError(*pubkey))
+    }
 }
 
-pub fn try_get_account_data_and_owner<'a>(
-    account_map: &'a AccountMap,
-    address: &Pubkey,
-) -> Result<(&'a [u8], &'a Pubkey)> {
-    let account = account_map
-        .get(address)
-        .with_context(|| format!("Could not find address: {address}"))?;
-    Ok((account.data.as_slice(), &account.owner))
+impl<'a, T: AccountProvider> AccountProvider for &'a T {
+    fn get(&self, pubkey: &Pubkey) -> Option<impl ReadableAccount + use<'_, 'a, T>> {
+        T::get(self, pubkey)
+    }
 }
 
-pub struct AmmContext {
-    pub clock_ref: ClockRef,
+impl<V, S: BuildHasher> AccountProvider for HashMap<Pubkey, V, S>
+where
+    V: Deref,
+    V::Target: ReadableAccount,
+{
+    fn get(&self, pubkey: &Pubkey) -> Option<impl ReadableAccount + use<'_, V, S>> {
+        HashMap::get(self, pubkey).map(Deref::deref)
+    }
 }
 
-pub trait Amm {
-    fn from_keyed_account(keyed_account: &KeyedAccount, amm_context: &AmmContext) -> Result<Self>
+#[derive(Debug, Error)]
+pub enum AmmError {
+    #[error(transparent)]
+    AccountNotFound(#[from] AccountNotFoundError),
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error(transparent)]
+    Program(#[from] ProgramError),
+    #[error("{0}")]
+    Custom(String),
+}
+
+impl From<&str> for AmmError {
+    fn from(value: &str) -> Self {
+        Self::Custom(value.to_string())
+    }
+}
+
+impl From<String> for AmmError {
+    fn from(value: String) -> Self {
+        Self::Custom(value)
+    }
+}
+
+pub trait Amm: Clone {
+    /// Deserializes on-chain account data and optional params into an AMM instance
+    fn from_keyed_account(
+        keyed_account: &KeyedAccount,
+        amm_context: &AmmContext,
+    ) -> Result<Self, AmmError>
     where
         Self: Sized;
+
     /// A human readable label of the underlying DEX
-    fn label(&self) -> String;
+    fn label(&self) -> AmmLabel;
+
+    /// The on-chain program that owns this AMM's accounts and executes its swaps
     fn program_id(&self) -> Pubkey;
+
     /// The pool state or market state address
     fn key(&self) -> Pubkey;
+
     /// The mints that can be traded
     fn get_reserve_mints(&self) -> Vec<Pubkey>;
+
     /// The accounts necessary to produce a quote
     fn get_accounts_to_update(&self) -> Vec<Pubkey>;
+
     /// Picks necessary accounts to update it's internal state
     /// Heavy deserialization and precomputation caching should be done in this function
-    fn update(&mut self, account_map: &AccountMap) -> Result<()>;
+    fn update(&mut self, account_provider: impl AccountProvider) -> Result<(), AmmError>;
 
-    fn quote(&self, quote_params: &QuoteParams) -> Result<Quote>;
+    /// Computes the expected token amounts and fees for a swap without executing it
+    fn quote(&self, quote_params: &QuoteParams) -> Result<Quote, AmmError>;
 
     /// Indicates which Swap has to be performed along with all the necessary account metas
-    fn get_swap_and_account_metas(&self, swap_params: &SwapParams) -> Result<SwapAndAccountMetas>;
+    fn get_swap_and_account_metas(
+        &self,
+        swap_params: &SwapParams,
+    ) -> Result<SwapAndAccountMetas, AmmError>;
 
     /// Indicates if get_accounts_to_update might return a non constant vec
     fn has_dynamic_accounts(&self) -> bool {
@@ -144,8 +213,6 @@ pub trait Amm {
     fn supports_exact_out(&self) -> bool {
         false
     }
-
-    fn clone_amm(&self) -> Box<dyn Amm + Send + Sync>;
 
     /// It can only trade in one direction from its first mint to second mint, assuming it is a two mint AMM
     fn unidirectional(&self) -> bool {
@@ -177,12 +244,6 @@ pub trait Amm {
     }
 }
 
-impl Clone for Box<dyn Amm + Send + Sync> {
-    fn clone(&self) -> Box<dyn Amm + Send + Sync> {
-        self.clone_amm()
-    }
-}
-
 pub type AmmLabel = &'static str;
 
 pub trait AmmProgramIdToLabel {
@@ -203,7 +264,7 @@ macro_rules! single_program_amm {
     ($amm_struct:ty, $program_id:expr, $label:expr) => {
         impl SingleProgramAmm for $amm_struct {
             const PROGRAM_ID: Pubkey = $program_id;
-            const LABEL: &'static str = $label;
+            const LABEL: AmmLabel = $label;
         }
     };
 }
@@ -212,18 +273,18 @@ macro_rules! single_program_amm {
 pub struct KeyedAccount {
     pub key: Pubkey,
     pub account: Account,
-    pub params: Option<Value>,
+    pub params: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Market {
-    #[serde(with = "field_as_string")]
+    #[serde(with = "custom_serde::field_as_string")]
     pub pubkey: Pubkey,
-    #[serde(with = "field_as_string")]
+    #[serde(with = "custom_serde::field_as_string")]
     pub owner: Pubkey,
     /// Additional data an Amm requires, Amm dependent and decoded in the Amm implementation
-    pub params: Option<Value>,
+    pub params: Option<serde_json::Value>,
 }
 
 impl From<KeyedAccount> for Market {
@@ -242,100 +303,61 @@ impl From<KeyedAccount> for Market {
     }
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
-pub struct KeyedUiAccount {
-    pub pubkey: String,
-    #[serde(flatten)]
-    pub ui_account: UiAccount,
-    /// Additional data an Amm requires, Amm dependent and decoded in the Amm implementation
-    pub params: Option<Value>,
+#[derive(Default)]
+pub struct AmmContext {
+    pub clock_ref: ClockRef,
 }
 
-impl From<KeyedAccount> for KeyedUiAccount {
-    fn from(keyed_account: KeyedAccount) -> Self {
-        let KeyedAccount {
-            key,
-            account,
-            params,
-        } = keyed_account;
-
-        let ui_account = encode_ui_account(&key, &account, UiAccountEncoding::Base64, None, None);
-
-        KeyedUiAccount {
-            pubkey: key.to_string(),
-            ui_account,
-            params,
-        }
-    }
-}
-
-impl TryFrom<KeyedUiAccount> for KeyedAccount {
-    type Error = Error;
-
-    fn try_from(keyed_ui_account: KeyedUiAccount) -> Result<Self, Self::Error> {
-        let KeyedUiAccount {
-            pubkey,
-            ui_account,
-            params,
-        } = keyed_ui_account;
-        let account = ui_account
-            .decode()
-            .unwrap_or_else(|| panic!("Failed to decode ui_account for {pubkey}"));
-
-        Ok(KeyedAccount {
-            key: Pubkey::from_str(&pubkey)?,
-            account,
-            params,
-        })
-    }
+#[derive(Default)]
+pub struct ClockData {
+    pub slot: AtomicU64,
+    /// The timestamp of the first `Slot` in this `Epoch`.
+    pub epoch_start_timestamp: AtomicI64,
+    /// The current `Epoch`.
+    pub epoch: AtomicU64,
+    pub leader_schedule_epoch: AtomicU64,
+    pub unix_timestamp: AtomicI64,
 }
 
 #[derive(Default, Clone)]
-pub struct ClockRef {
-    pub slot: Arc<AtomicU64>,
-    /// The timestamp of the first `Slot` in this `Epoch`.
-    pub epoch_start_timestamp: Arc<AtomicI64>,
-    /// The current `Epoch`.
-    pub epoch: Arc<AtomicU64>,
-    pub leader_schedule_epoch: Arc<AtomicU64>,
-    pub unix_timestamp: Arc<AtomicI64>,
+pub struct ClockRef(Arc<ClockData>);
+
+impl Deref for ClockRef {
+    type Target = ClockData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl ClockRef {
     pub fn update(&self, clock: Clock) {
-        self.epoch
-            .store(clock.epoch, std::sync::atomic::Ordering::Relaxed);
-        self.slot
-            .store(clock.slot, std::sync::atomic::Ordering::Relaxed);
+        self.epoch.store(clock.epoch, Ordering::Relaxed);
+        self.slot.store(clock.slot, Ordering::Relaxed);
         self.unix_timestamp
-            .store(clock.unix_timestamp, std::sync::atomic::Ordering::Relaxed);
-        self.epoch_start_timestamp.store(
-            clock.epoch_start_timestamp,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-        self.leader_schedule_epoch.store(
-            clock.leader_schedule_epoch,
-            std::sync::atomic::Ordering::Relaxed,
-        );
+            .store(clock.unix_timestamp, Ordering::Relaxed);
+        self.epoch_start_timestamp
+            .store(clock.epoch_start_timestamp, Ordering::Relaxed);
+        self.leader_schedule_epoch
+            .store(clock.leader_schedule_epoch, Ordering::Relaxed);
     }
 }
 
 impl From<Clock> for ClockRef {
     fn from(clock: Clock) -> Self {
-        ClockRef {
-            epoch: Arc::new(AtomicU64::new(clock.epoch)),
-            epoch_start_timestamp: Arc::new(AtomicI64::new(clock.epoch_start_timestamp)),
-            leader_schedule_epoch: Arc::new(AtomicU64::new(clock.leader_schedule_epoch)),
-            slot: Arc::new(AtomicU64::new(clock.slot)),
-            unix_timestamp: Arc::new(AtomicI64::new(clock.unix_timestamp)),
-        }
+        ClockRef(Arc::new(ClockData {
+            epoch: AtomicU64::new(clock.epoch),
+            epoch_start_timestamp: AtomicI64::new(clock.epoch_start_timestamp),
+            leader_schedule_epoch: AtomicU64::new(clock.leader_schedule_epoch),
+            slot: AtomicU64::new(clock.slot),
+            unix_timestamp: AtomicI64::new(clock.unix_timestamp),
+        }))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use solana_sdk::pubkey;
+    use {super::*, solana_pubkey::pubkey};
 
     #[test]
     fn test_market_deserialization() {

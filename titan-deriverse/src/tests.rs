@@ -1363,19 +1363,19 @@ pub mod tests {
                 .unwrap();
 
                 let lines = vec![
-                    // bid (line 0)
+                    // ask (line 0)
                     PxOrders {
-                        price: (84.28 * DF) as i64,
-                        qty: 21010704,
+                        price: (85.52 * DF) as i64,
+                        qty: 25000000,
                         next: 1,
                         prev: NULL_ORDER,
                         sref: 0,
                         begin: 0,
                         ..Zeroable::zeroed()
                     },
-                    // bid (line 1)
+                    // ask (line 1)
                     PxOrders {
-                        price: (84.29 * DF) as i64,
+                        price: (85.53 * DF) as i64,
                         qty: 30000000,
                         next: 2,
                         prev: 0,
@@ -1385,7 +1385,7 @@ pub mod tests {
                     },
                     // ask (line 2)
                     PxOrders {
-                        price: (84.31 * DF) as i64,
+                        price: (85.55 * DF) as i64,
                         qty: 35000000,
                         next: 3,
                         prev: 1,
@@ -1393,9 +1393,9 @@ pub mod tests {
                         begin: 2,
                         ..Zeroable::zeroed()
                     },
-                    // bid (line 3)
+                    // ask (line 3)
                     PxOrders {
-                        price: (84.33 * DF) as i64,
+                        price: (85.57 * DF) as i64,
                         qty: 40000000,
                         next: 4,
                         prev: 2,
@@ -1405,7 +1405,7 @@ pub mod tests {
                     },
                     // ask (line 4)
                     PxOrders {
-                        price: (84.36 * DF) as i64,
+                        price: (85.58 * DF) as i64,
                         qty: 45000000,
                         next: 5,
                         prev: 3,
@@ -1413,9 +1413,9 @@ pub mod tests {
                         begin: 4,
                         ..Zeroable::zeroed()
                     },
-                    // empty (line 5)
+                    // ask (line 5)
                     PxOrders {
-                        price: (84.38 * DF) as i64,
+                        price: (85.6 * DF) as i64,
                         qty: 50000000,
                         next: NULL_ORDER,
                         prev: 4,
@@ -1423,9 +1423,64 @@ pub mod tests {
                         begin: 5,
                         ..Zeroable::zeroed()
                     },
+                    // bid (line 0)
                     PxOrders {
-                        next: NULL_ORDER,
+                        price: (85.34 * DF) as i64,
+                        qty: 25000000,
+                        next: 7,
                         prev: NULL_ORDER,
+                        sref: 6,
+                        begin: 0,
+                        ..Zeroable::zeroed()
+                    },
+                    // bid (line 1)
+                    PxOrders {
+                        price: (85.33 * DF) as i64,
+                        qty: 30000000,
+                        next: 8,
+                        prev: 6,
+                        sref: 7,
+                        begin: 1,
+                        ..Zeroable::zeroed()
+                    },
+                    // bid (line 2)
+                    PxOrders {
+                        price: (85.31 * DF) as i64,
+                        qty: 35000000,
+                        next: 9,
+                        prev: 7,
+                        sref: 8,
+                        begin: 2,
+                        ..Zeroable::zeroed()
+                    },
+                    // bid (line 3)
+                    PxOrders {
+                        price: (85.29 * DF) as i64,
+                        qty: 40000000,
+                        next: 10,
+                        prev: 8,
+                        sref: 9,
+                        begin: 3,
+                        ..Zeroable::zeroed()
+                    },
+                    // bid (line 4)
+                    PxOrders {
+                        price: (85.27 * DF) as i64,
+                        qty: 45000000,
+                        next: 11,
+                        prev: 9,
+                        sref: 10,
+                        begin: 4,
+                        ..Zeroable::zeroed()
+                    },
+                    // bid (line 5)
+                    PxOrders {
+                        price: (85.26 * DF) as i64,
+                        qty: 50000000,
+                        next: NULL_ORDER,
+                        prev: 10,
+                        sref: 11,
+                        begin: 5,
                         ..Zeroable::zeroed()
                     },
                 ];
@@ -1438,23 +1493,71 @@ pub mod tests {
 
                 let bid_orders: Orders = vec![
                     Order {
-                        order_id: 10,
-                        next: NULL_ORDER,
+                        qty: 25000000,
+                        sum: sum_for(25000000, 6),
+                        order_id: 0,
+                        line: 6,
                         prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 0,
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        order_id: 11,
-                        next: NULL_ORDER,
+                        qty: 30_000_000,
+                        sum: sum_for(30_000_000, 7),
+                        order_id: 1,
+                        line: 7,
                         prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 1,
+                        ..Zeroable::zeroed()
+                    },
+                    Order {
+                        qty: 35_000_000,
+                        sum: sum_for(35_000_000, 8),
+                        order_id: 2,
+                        line: 8,
+                        prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 2,
+                        ..Zeroable::zeroed()
+                    },
+                    Order {
+                        qty: 40_000_000,
+                        sum: sum_for(40_000_000, 9),
+                        order_id: 3,
+                        line: 9,
+                        prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 3,
+                        ..Zeroable::zeroed()
+                    },
+                    Order {
+                        qty: 45_000_000,
+                        sum: sum_for(45_000_000, 10),
+                        order_id: 4,
+                        line: 10,
+                        prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 4,
+                        ..Zeroable::zeroed()
+                    },
+                    Order {
+                        qty: 50_000_000,
+                        sum: sum_for(50_000_000, 11),
+                        order_id: 5,
+                        line: 11,
+                        prev: NULL_ORDER,
+                        next: NULL_ORDER,
+                        sref: 5,
                         ..Zeroable::zeroed()
                     },
                 ];
 
                 let ask_orders: Orders = vec![
                     Order {
-                        qty: 21010704,
-                        sum: sum_for(21010704, 0),
+                        qty: 25000000,
+                        sum: sum_for(25000000, 0),
                         order_id: 0,
                         line: 0,
                         prev: NULL_ORDER,
@@ -1482,7 +1585,6 @@ pub mod tests {
                         sref: 2,
                         ..Zeroable::zeroed()
                     },
-                    // --- Line 4 orders (begin=3, qty: 25k+25k+25k+25k = 100k) ---
                     Order {
                         qty: 40_000_000,
                         sum: sum_for(40_000_000, 3),
@@ -1513,25 +1615,12 @@ pub mod tests {
                         sref: 5,
                         ..Zeroable::zeroed()
                     },
-                    // --- Empty orders ---
-                    Order {
-                        order_id: 6,
-                        next: NULL_ORDER,
-                        prev: NULL_ORDER,
-                        ..Zeroable::zeroed()
-                    },
-                    Order {
-                        order_id: 7,
-                        next: NULL_ORDER,
-                        prev: NULL_ORDER,
-                        ..Zeroable::zeroed()
-                    },
                 ];
 
                 deriverse
                     .init_community_header(20, &mut accounts_map)
                     .unwrap();
-                deriverse.init_amm1(9612212333, 810117255);
+                deriverse.init_amm1(9542270844, 816055002);
 
                 deriverse
                     .init_order_book(
@@ -1539,7 +1628,7 @@ pub mod tests {
                         lines.clone(),
                         ask_orders,
                         bid_orders,
-                        NULL_ORDER as usize,
+                        6,
                         0,
                     )
                     .unwrap();
@@ -1573,12 +1662,12 @@ pub mod tests {
                     )),
                 );
 
-                deriverse.instr_header.asset_tokens = 9612212333;
-                deriverse.instr_header.crncy_tokens = 810117255;
-                deriverse.instr_header.day_volatility = 0.04485463156912811;
-                deriverse.instr_header.last_px = 84279999955;
-                deriverse.amm.a_tokens = 9612212333;
-                deriverse.amm.b_tokens = 810117255;
+                deriverse.instr_header.asset_tokens = 9542270844;
+                deriverse.instr_header.crncy_tokens = 816055002;
+                deriverse.instr_header.day_volatility = 0.04023745522889307;
+                deriverse.instr_header.last_px = 85519999939;
+                deriverse.amm.a_tokens = 9542270844;
+                deriverse.amm.b_tokens = 816055002;
 
                 accounts_map.insert(
                     deriverse.accounts_ctx.instr_header,
@@ -1616,11 +1705,47 @@ pub mod tests {
             }
 
             #[test]
+            fn sell() {
+                let deriverse = init_deriverse();
+
+                let result = deriverse
+                    .quote(&QuoteParams {
+                        amount: 100000000,
+                        input_mint: TOKEN_A1.mint,
+                        output_mint: TOKEN_B1.mint,
+                        swap_mode: SwapMode::ExactIn,
+                        fee_mode: FeeMode::Normal,
+                    })
+                    .unwrap();
+
+                println!("In Amount: {}", result.in_amount);
+                println!("Out Amount: {}", result.out_amount);
+
+                let expected_in_amount = 100000000;
+                let expected_out_amount = 8528443;
+                println!("Expected in_amount: {}", expected_in_amount);
+                println!("Expected out_amount: {}", expected_out_amount);
+
+                assert!(
+                    result.in_amount == expected_in_amount,
+                    "Diff in in_amount: {} vs {}",
+                    result.in_amount,
+                    expected_in_amount
+                );
+                assert!(
+                    result.out_amount == expected_out_amount,
+                    "Diff in out_amount:: {} vs {}",
+                    result.out_amount,
+                    expected_out_amount
+                );
+            }
+
+            #[test]
             fn buy() {
                 let deriverse = init_deriverse();
                 let result = deriverse
                     .quote(&QuoteParams {
-                        amount: 67824544,
+                        amount: 100000000,
                         input_mint: TOKEN_B1.mint,
                         output_mint: TOKEN_A1.mint,
                         swap_mode: SwapMode::ExactIn,
@@ -1631,8 +1756,8 @@ pub mod tests {
                 println!("In Amount: {}", result.in_amount);
                 println!("Out Amount: {}", result.out_amount);
 
-                let expected_in_amount = 67824542;
-                let expected_out_amount = 770742331;
+                let expected_in_amount = 68795502;
+                let expected_out_amount = 770731609;
                 println!("Expected in_amount: {}", expected_in_amount);
                 println!("Expected out_amount: {}", expected_out_amount);
 

@@ -655,12 +655,9 @@ impl Amm for Deriverse {
 
             client_tokens += qty;
 
-            let mut incr = false;
-
             if remaining_sum == 1 {
                 if estimated_fees > 0 {
                     total_fees = estimated_fees + 1;
-                    incr = true;
                 } else {
                     remaining_sum = 0;
                 }
@@ -671,17 +668,17 @@ impl Amm for Deriverse {
             let traded_sum = input_sum - remaining_sum;
 
             total_fees = total_fees.max((traded_sum as f64 * fee_rate) as i64);
-            if exhausted && fee_rate > 0.0 && !incr {
-                total_fees += 1;
+
+            if remaining_sum > 1 {
+                if exhausted && fee_rate > 0.0 {
+                    total_fees += 1;
+                }
+                if swap_fee_rate > 0.0 {
+                    swap_fees = (traded_sum as f64 * swap_fee_rate) as i64 + 1;
+                }
             }
 
-            client_mints -= traded_sum;
-
-            if remaining_sum > 1 && swap_fee_rate > 0.0 {
-                swap_fees = (traded_sum as f64 * swap_fee_rate) as i64;
-            }
-
-            client_mints -= total_fees + swap_fees;
+            client_mints -= traded_sum + total_fees + swap_fees;
 
             fees_amount = total_fees;
         } else if !buy && (price < px || order_book.cross(price, OrderSide::Bid)) {
@@ -874,7 +871,7 @@ impl Amm for Deriverse {
                             .ok_or(AmmError::Custom("Arithmetic overflow".to_string()))?;
                     }
 
-                    if DeriverseAmm::cover_line(next_amm_px, price, line.price, OrderSide::Bid) {
+                    if DeriverseAmm::cover_line(amm_px, price, line.price, OrderSide::Bid) {
                         let (traded_qty, traded_sum, traded_fees) =
                             self.order_book
                                 .fill(&line, remaining_qty, fee_rate, OrderSide::Bid)?;

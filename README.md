@@ -1,6 +1,6 @@
-# Jupiter-Deriverse Integration
+# Titan-Deriverse Integration
 
-A Jupiter aggregator integration for the Deriverse protocol.
+A Titan aggregator integration for the Deriverse protocol.
 
 ## Internal State Construction
 
@@ -119,13 +119,17 @@ The system program account has been removed from the integration. The design all
 **Common error:** non-preallocated candle buffers — allocate them via `extend_candles` if required.
 
 ## Testing
-```bash
-cargo integration_tests
-```
-Execute only off chain tests
-
+1. Execute only off chain tests
 ```bash
 cargo test
 ```
-Execute all tests
-# jupiter-deriverse
+
+2. Execute rpc tests
+```bash
+cargo test --features "rpc-test"
+```
+
+3. Execute rpc tests
+```bash
+cargo test --features "mainnet-test"
+```

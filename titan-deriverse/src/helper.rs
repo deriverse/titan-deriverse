@@ -1,11 +1,9 @@
 use drv_models::{
-    constants::{
-        candles::{CandleParams, CandleRegister},
-        seeds::DRVS_SEED,
-    },
+    constants::{MAX_NUMBER, seeds::DRVS_SEED},
     new_types::version::Version,
-    state::types::account_type,
+    state::types::{CappedI64, account_type},
 };
+use jupiter_amm_interface::AmmError;
 use solana_pubkey::Pubkey;
 
 use crate::program_id::{self, VERSION};
@@ -99,16 +97,99 @@ impl Helper for Pubkey {
     }
 }
 
-pub const fn get_by_tag<const TAG: u32>(container: CandleRegister) -> CandleParams {
-    let mut i = 0;
+pub trait CappedNumber: Sized + Copy {
+    type RawType: Into<Self> + From<Self> + Copy;
 
-    while i < container.candles.len() {
-        if container.candles[i].tag == TAG {
-            return container.candles[i];
-        }
-        i += 1;
+    #[inline]
+    fn new(value: Self::RawType) -> Self {
+        value.into()
     }
 
-    // unreachable code
-    container.candles[0]
+    // As the type copy taking a link will result in the same performance
+    fn validate<T: Into<Self::RawType>>(value: T) -> Result<(), AmmError>;
+
+    #[inline]
+    fn new_checked(value: Self::RawType) -> Result<Self, AmmError> {
+        Self::validate(value)?;
+
+        Ok(Self::new(value))
+    }
+
+    fn get(&self) -> Self::RawType;
+
+    fn add<T: Into<Self::RawType>>(&self, other: T) -> Self;
+
+    fn sub<T: Into<Self::RawType>>(&self, other: T) -> Self;
+
+    fn checked_add<T: Into<Self::RawType>>(&self, other: T) -> Option<Self>;
+
+    fn checked_sub<T: Into<Self::RawType>>(&self, other: T) -> Option<Self>;
+
+    #[inline]
+    fn checked_sub_capped<T: Into<Self::RawType>>(&self, other: T) -> Result<Self, AmmError> {
+        let value = self
+            .checked_sub(other.into())
+            .ok_or(AmmError::Custom("ArithmeticOverflow".to_string()))?;
+
+        Self::validate(value)?;
+
+        Ok(value)
+    }
+
+    #[inline]
+    fn checked_add_capped<T: Into<Self::RawType>>(&self, other: T) -> Result<Self, AmmError> {
+        let value = self
+            .checked_add(other.into())
+            .ok_or(AmmError::Custom("ArithmeticOverflow".to_string()))?;
+
+        Self::validate(value)?;
+
+        Ok(value)
+    }
+}
+
+impl CappedNumber for CappedI64 {
+    type RawType = i64;
+
+    #[inline]
+    fn get(&self) -> Self::RawType {
+        self.value
+    }
+
+    #[inline]
+    fn add<T: Into<Self::RawType>>(&self, other: T) -> Self {
+        Self {
+            value: self.value + other.into(),
+        }
+    }
+
+    #[inline]
+    fn sub<T: Into<Self::RawType>>(&self, other: T) -> Self {
+        Self {
+            value: self.value - other.into(),
+        }
+    }
+
+    #[inline]
+    fn checked_add<T: Into<Self::RawType>>(&self, other: T) -> Option<Self> {
+        self.value
+            .checked_add(other.into())
+            .map(|v| Self { value: v })
+    }
+
+    #[inline]
+    fn checked_sub<T: Into<Self::RawType>>(&self, other: T) -> Option<Self> {
+        self.value
+            .checked_sub(other.into())
+            .map(|v| Self { value: v })
+    }
+
+    #[inline]
+    fn validate<T: Into<Self::RawType>>(value: T) -> Result<(), AmmError> {
+        if value.into().unsigned_abs() as i64 > MAX_NUMBER {
+            return Err(AmmError::Custom("Max Number Overflow".to_string()));
+        }
+
+        Ok(())
+    }
 }

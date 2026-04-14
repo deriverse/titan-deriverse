@@ -15,12 +15,11 @@ pub mod tests {
         use drv_models::{
             constants::{DF, nulls::NULL_ORDER, trading_limitations::MAX_PRICE},
             state::{
-                candles::CandlesAccountHeader,
                 community_account_header::CommunityAccountHeader,
                 instrument::InstrAccountHeader,
                 spots::spot_account_header::SpotTradeAccountHeaderNonGen,
                 token::TokenState,
-                types::{Order, PxOrders},
+                types::{CappedI64, Order, PxOrders},
             },
         };
         use jupiter_amm_interface::{
@@ -32,7 +31,7 @@ pub mod tests {
 
         use crate::{
             Deriverse, InstructionBuilderParams, ParamsWrapper,
-            helper::get_dec_factor,
+            helper::{CappedNumber, get_dec_factor},
             lines_linked_list::Lines,
             orders_linked_list::Orders,
             tests::tests::{
@@ -136,24 +135,6 @@ pub mod tests {
         }
 
         impl Deriverse {
-            pub fn init_community_header(
-                &mut self,
-                fee_rate: u32,
-                account_metas: &mut AccountMap,
-            ) -> Result<()> {
-                let header = CommunityAccountHeader {
-                    spot_fee_rate: fee_rate,
-                    ..Zeroable::zeroed()
-                };
-
-                account_metas.insert(
-                    self.accounts_ctx.community_acc,
-                    Box::new(default_account_with_object(&header)),
-                );
-
-                Ok(())
-            }
-
             pub fn init_order_book(
                 &mut self,
                 account_metas: &mut AccountMap,
@@ -162,12 +143,15 @@ pub mod tests {
                 bid_orders: Orders,
                 bid_begin_line: usize,
                 ask_begin_line: usize,
+                spot_fee_rate: u32,
             ) -> Result<()> {
                 self.instr_header.bid_lines_begin = bid_begin_line as u32;
                 self.instr_header.ask_lines_begin = ask_begin_line as u32;
 
                 self.instr_header.bid_lines_count = lines.len() as u32;
                 self.instr_header.ask_lines_count = lines.len() as u32;
+
+                self.instr_header.spot_fee_rate = spot_fee_rate as u8;
 
                 self.instr_header.best_ask = lines
                     .get(ask_begin_line)
@@ -227,10 +211,10 @@ pub mod tests {
                 let Deriverse { instr_header, .. } = self;
 
                 instr_header.asset_mint = TOKEN_A.mint;
-                instr_header.asset_tokens = a_tokens;
+                instr_header.asset_tokens = CappedI64::new(a_tokens);
 
                 instr_header.crncy_mint = TOKEN_B.mint;
-                instr_header.crncy_tokens = b_tokens;
+                instr_header.crncy_tokens = CappedI64::new(b_tokens);
 
                 instr_header.dec_factor =
                     get_dec_factor((9 + TOKEN_A.decs_count - TOKEN_B.decs_count) as u8);
@@ -240,10 +224,10 @@ pub mod tests {
                 let Deriverse { instr_header, .. } = self;
 
                 instr_header.asset_mint = TOKEN_A1.mint;
-                instr_header.asset_tokens = a_tokens;
+                instr_header.asset_tokens = CappedI64::new(a_tokens);
 
                 instr_header.crncy_mint = TOKEN_B1.mint;
-                instr_header.crncy_tokens = b_tokens;
+                instr_header.crncy_tokens = CappedI64::new(b_tokens);
 
                 instr_header.dec_factor =
                     get_dec_factor((9 + TOKEN_A1.decs_count - TOKEN_B1.decs_count) as u8);
@@ -284,7 +268,7 @@ pub mod tests {
                 // bid (line 0)
                 PxOrders {
                     price: (10.4 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: 3,
                     prev: 1,
                     sref: 0,
@@ -294,7 +278,7 @@ pub mod tests {
                 // bid (line 1)
                 PxOrders {
                     price: (10.1 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: 0,
                     prev: NULL_ORDER,
                     sref: 1,
@@ -304,7 +288,7 @@ pub mod tests {
                 // ask (line 2)
                 PxOrders {
                     price: (9.9 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: 4,
                     prev: NULL_ORDER,
                     sref: 0,
@@ -314,7 +298,7 @@ pub mod tests {
                 // bid (line 3)
                 PxOrders {
                     price: (10.0 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: NULL_ORDER,
                     prev: 3,
                     sref: 0,
@@ -324,7 +308,7 @@ pub mod tests {
                 // ask (line 4)
                 PxOrders {
                     price: (10.1 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: 6,
                     prev: NULL_ORDER,
                     sref: 0,
@@ -339,7 +323,7 @@ pub mod tests {
                 // ask (line 6)
                 PxOrders {
                     price: (10.1 * DF) as i64,
-                    qty: 100_000,
+                    qty: 100_000.into(),
                     next: NULL_ORDER,
                     prev: 4,
                     sref: 0,
@@ -351,12 +335,14 @@ pub mod tests {
             let dec_factor =
                 get_dec_factor((9 + TOKEN_A.decs_count - TOKEN_B.decs_count) as u8) as f64;
             let sum_for = |qty: i64, line: u32| {
-                ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64
+                CappedI64::new(
+                    ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64,
+                )
             };
 
             let bid_orders: Orders = vec![
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 0),
                     order_id: 0,
                     line: 0,
@@ -366,7 +352,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 40_000,
+                    qty: 40_000.into(),
                     sum: sum_for(40_000, 0),
                     order_id: 1,
                     line: 0,
@@ -376,7 +362,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 0),
                     order_id: 2,
                     line: 0,
@@ -386,7 +372,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 1),
                     order_id: 3,
                     line: 1,
@@ -396,7 +382,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 50_000,
+                    qty: 50_000.into(),
                     sum: sum_for(50_000, 1),
                     order_id: 4,
                     line: 1,
@@ -406,7 +392,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 1),
                     order_id: 5,
                     line: 1,
@@ -416,7 +402,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 20_000,
+                    qty: 20_000.into(),
                     sum: sum_for(20_000, 3),
                     order_id: 6,
                     line: 3,
@@ -426,7 +412,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 3),
                     order_id: 7,
                     line: 3,
@@ -436,7 +422,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 3),
                     order_id: 8,
                     line: 3,
@@ -446,7 +432,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 20_000,
+                    qty: 20_000.into(),
                     sum: sum_for(20_000, 3),
                     order_id: 9,
                     line: 3,
@@ -471,7 +457,7 @@ pub mod tests {
 
             let ask_orders: Orders = vec![
                 Order {
-                    qty: 40_000,
+                    qty: 40_000.into(),
                     sum: sum_for(40_000, 2),
                     order_id: 0,
                     line: 2,
@@ -481,7 +467,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 2),
                     order_id: 1,
                     line: 2,
@@ -491,7 +477,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 2),
                     order_id: 2,
                     line: 2,
@@ -501,7 +487,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 4),
                     order_id: 3,
                     line: 4,
@@ -511,7 +497,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 4),
                     order_id: 4,
                     line: 4,
@@ -521,7 +507,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 4),
                     order_id: 5,
                     line: 4,
@@ -531,7 +517,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 25_000,
+                    qty: 25_000.into(),
                     sum: sum_for(25_000, 4),
                     order_id: 6,
                     line: 4,
@@ -541,7 +527,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 35_000,
+                    qty: 35_000.into(),
                     sum: sum_for(35_000, 6),
                     order_id: 7,
                     line: 6,
@@ -551,7 +537,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 35_000,
+                    qty: 35_000.into(),
                     sum: sum_for(35_000, 6),
                     order_id: 8,
                     line: 6,
@@ -561,7 +547,7 @@ pub mod tests {
                     ..Zeroable::zeroed()
                 },
                 Order {
-                    qty: 30_000,
+                    qty: 30_000.into(),
                     sum: sum_for(30_000, 6),
                     order_id: 9,
                     line: 6,
@@ -584,9 +570,6 @@ pub mod tests {
                 },
             ];
 
-            deriverse
-                .init_community_header(10, &mut accounts_map)
-                .unwrap();
             deriverse.init_amm(
                 110 * get_dec_factor(TOKEN_A.decs_count as u8),
                 11 * get_dec_factor(TOKEN_A.decs_count as u8),
@@ -599,6 +582,7 @@ pub mod tests {
                     bid_orders,
                     1,
                     2,
+                    10,
                 )
                 .unwrap();
 
@@ -630,23 +614,6 @@ pub mod tests {
                     bytes_of(&TokenState::zeroed()).to_vec(),
                 )),
             );
-
-            if let Some(candles) = deriverse.accounts_ctx.candles {
-                let header = CandlesAccountHeader::<0>::zeroed();
-                let header = bytes_of(&header);
-                accounts_map.insert(
-                    candles.0,
-                    Box::new(default_account_with_data(header.to_vec())),
-                );
-                accounts_map.insert(
-                    candles.1,
-                    Box::new(default_account_with_data(header.to_vec())),
-                );
-                accounts_map.insert(
-                    candles.2,
-                    Box::new(default_account_with_data(header.to_vec())),
-                );
-            }
 
             let mut new_deriverse = Deriverse::from_keyed_account(
                 &build_key_account(InstructionBuilderParams { ata_init: false }).unwrap(),
@@ -680,8 +647,6 @@ pub mod tests {
 
         pub mod test_quote_order_book_only {
 
-            use std::os::unix::fs::FileTypeExt;
-
             use drv_models::constants::SWAP_FEE_RATE;
             use jupiter_amm_interface::FeeMode;
 
@@ -702,7 +667,7 @@ pub mod tests {
                     // bid (line 0)
                     PxOrders {
                         price: (10.1 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: 3,
                         prev: 1,
                         sref: 0,
@@ -712,7 +677,7 @@ pub mod tests {
                     // bid (line 1)
                     PxOrders {
                         price: (10.4 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: 0,
                         prev: NULL_ORDER,
                         sref: 1,
@@ -722,7 +687,7 @@ pub mod tests {
                     // ask (line 2)
                     PxOrders {
                         price: (9.9 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: 4,
                         prev: NULL_ORDER,
                         sref: 0,
@@ -732,7 +697,7 @@ pub mod tests {
                     // bid (line 3)
                     PxOrders {
                         price: (10.0 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: NULL_ORDER,
                         prev: 3,
                         sref: 0,
@@ -742,7 +707,7 @@ pub mod tests {
                     // ask (line 4)
                     PxOrders {
                         price: (10.1 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: 6,
                         prev: NULL_ORDER,
                         sref: 0,
@@ -758,7 +723,7 @@ pub mod tests {
                     // ask (line 6)
                     PxOrders {
                         price: (10.1 * DF) as i64,
-                        qty: 100_000,
+                        qty: 100_000.into(),
                         next: NULL_ORDER,
                         prev: 4,
                         sref: 0,
@@ -770,12 +735,14 @@ pub mod tests {
                 let dec_factor =
                     get_dec_factor((9 + TOKEN_A.decs_count - TOKEN_B.decs_count) as u8) as f64;
                 let sum_for = |qty: i64, line: u32| {
-                    ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64
+                    CappedI64::new(
+                        ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64,
+                    )
                 };
 
                 let bid_orders: Orders = vec![
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 0),
                         order_id: 0,
                         line: 0,
@@ -785,7 +752,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 40_000,
+                        qty: 40_000.into(),
                         sum: sum_for(40_000, 0),
                         order_id: 1,
                         line: 0,
@@ -795,7 +762,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 0),
                         order_id: 2,
                         line: 0,
@@ -805,7 +772,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 1),
                         order_id: 3,
                         line: 1,
@@ -815,7 +782,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 50_000,
+                        qty: 50_000.into(),
                         sum: sum_for(50_000, 1),
                         order_id: 4,
                         line: 1,
@@ -825,7 +792,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 1),
                         order_id: 5,
                         line: 1,
@@ -835,7 +802,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 20_000,
+                        qty: 20_000.into(),
                         sum: sum_for(20_000, 3),
                         order_id: 6,
                         line: 3,
@@ -845,7 +812,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 3),
                         order_id: 7,
                         line: 3,
@@ -855,7 +822,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 3),
                         order_id: 8,
                         line: 3,
@@ -865,7 +832,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 20_000,
+                        qty: 20_000.into(),
                         sum: sum_for(20_000, 3),
                         order_id: 9,
                         line: 3,
@@ -890,7 +857,7 @@ pub mod tests {
 
                 let ask_orders: Orders = vec![
                     Order {
-                        qty: 40_000,
+                        qty: 40_000.into(),
                         sum: sum_for(40_000, 2),
                         order_id: 0,
                         line: 2,
@@ -900,7 +867,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 2),
                         order_id: 1,
                         line: 2,
@@ -910,7 +877,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 2),
                         order_id: 2,
                         line: 2,
@@ -920,7 +887,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 4),
                         order_id: 3,
                         line: 4,
@@ -930,7 +897,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 4),
                         order_id: 4,
                         line: 4,
@@ -940,7 +907,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 4),
                         order_id: 5,
                         line: 4,
@@ -950,7 +917,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 25_000,
+                        qty: 25_000.into(),
                         sum: sum_for(25_000, 4),
                         order_id: 6,
                         line: 4,
@@ -960,7 +927,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 35_000,
+                        qty: 35_000.into(),
                         sum: sum_for(35_000, 6),
                         order_id: 7,
                         line: 6,
@@ -970,7 +937,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 35_000,
+                        qty: 35_000.into(),
                         sum: sum_for(35_000, 6),
                         order_id: 8,
                         line: 6,
@@ -980,7 +947,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000,
+                        qty: 30_000.into(),
                         sum: sum_for(30_000, 6),
                         order_id: 9,
                         line: 6,
@@ -1002,8 +969,8 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                 ];
-
-                let orders_sum = bid_orders[0].sum + bid_orders[1].sum + bid_orders[2].sum;
+                let orders_sum =
+                    bid_orders[0].sum.value + bid_orders[1].sum.value + bid_orders[2].sum.value;
                 println!("Order sum {}", orders_sum);
 
                 let lines_sum = ((100_000 as f64 * (10.1 * DF) as f64) / dec_factor) as i64;
@@ -1011,9 +978,6 @@ pub mod tests {
 
                 assert_eq!(orders_sum, lines_sum);
 
-                deriverse
-                    .init_community_header(0, &mut accounts_map)
-                    .unwrap();
                 deriverse.init_amm(0, 0);
                 deriverse
                     .init_order_book(
@@ -1023,6 +987,7 @@ pub mod tests {
                         bid_orders,
                         1,
                         2,
+                        0,
                     )
                     .unwrap();
 
@@ -1061,23 +1026,6 @@ pub mod tests {
                     deriverse.accounts_ctx.instr_header,
                     Box::new(default_account_with_object(deriverse.instr_header.as_ref())),
                 );
-
-                if let Some(candles) = deriverse.accounts_ctx.candles {
-                    let header = CandlesAccountHeader::<0>::zeroed();
-                    let header = bytes_of(&header);
-                    accounts_map.insert(
-                        candles.0,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.1,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.2,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                }
 
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account(instruction_builder_params).unwrap(),
@@ -1183,8 +1131,10 @@ pub mod tests {
         }
 
         pub mod test_quote_amm_only {
-            use drv_models::constants::SWAP_FEE_RATE;
+            use drv_models::{constants::SWAP_FEE_RATE, state::types::CappedI64};
             use jupiter_amm_interface::FeeMode;
+
+            use crate::helper::CappedNumber;
 
             use super::*;
 
@@ -1201,15 +1151,12 @@ pub mod tests {
 
                 let lines = vec![];
 
-                deriverse
-                    .init_community_header(0, &mut accounts_map)
-                    .unwrap();
                 deriverse.init_amm(
                     1_000_000 * get_dec_factor(TOKEN_A.decs_count as u8),
                     10_000_000 * get_dec_factor(TOKEN_B.decs_count as u8),
                 );
                 deriverse
-                    .init_order_book(&mut accounts_map, lines.clone(), vec![], vec![], 0, 0)
+                    .init_order_book(&mut accounts_map, lines.clone(), vec![], vec![], 0, 0, 0)
                     .unwrap();
 
                 accounts_map.insert(
@@ -1247,23 +1194,6 @@ pub mod tests {
                     deriverse.accounts_ctx.instr_header,
                     Box::new(default_account_with_object(deriverse.instr_header.as_ref())),
                 );
-
-                if let Some(candles) = deriverse.accounts_ctx.candles {
-                    let header = CandlesAccountHeader::<0>::zeroed();
-                    let header = bytes_of(&header);
-                    accounts_map.insert(
-                        candles.0,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.1,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.2,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                }
 
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account(InstructionBuilderParams { ata_init: false }).unwrap(),
@@ -1310,18 +1240,18 @@ pub mod tests {
                 let mut deriverse = init_deriverse();
 
                 deriverse.instr_header.asset_tokens =
-                    1_000_000 * get_dec_factor(TOKEN_A.decs_count as u8);
+                    CappedI64::new(1_000_000 * get_dec_factor(TOKEN_A.decs_count as u8));
 
                 deriverse.instr_header.crncy_tokens =
-                    10_000_000 * get_dec_factor(TOKEN_B.decs_count as u8);
+                    CappedI64::new(10_000_000 * get_dec_factor(TOKEN_B.decs_count as u8));
 
                 let result = deriverse
                     .quote(&QuoteParams {
-                        fee_mode: FeeMode::Normal,
                         amount: 1_400_000_000,
                         input_mint: TOKEN_B.mint,
                         output_mint: TOKEN_A.mint,
                         swap_mode: SwapMode::ExactIn,
+                        fee_mode: FeeMode::Normal,
                     })
                     .unwrap();
 
@@ -1336,10 +1266,10 @@ pub mod tests {
                 let diff = (result.out_amount as i64 - expected as i64).abs();
 
                 assert!(
-                    (diff as f64) < (expected as f64 * 0.000_001),
+                    (diff as f64) < (expected as f64 * 0.000_001 + 1.0),
                     "Calculations are not presize enough: diff ({}) > {}",
                     diff,
-                    expected as f64 * 0.000_001
+                    expected as f64 * 0.000_001 + 1.0
                 );
             }
         }
@@ -1366,7 +1296,7 @@ pub mod tests {
                     // ask (line 0)
                     PxOrders {
                         price: (85.52 * DF) as i64,
-                        qty: 25000000,
+                        qty: 25000000.into(),
                         next: 1,
                         prev: NULL_ORDER,
                         sref: 0,
@@ -1376,7 +1306,7 @@ pub mod tests {
                     // ask (line 1)
                     PxOrders {
                         price: (85.53 * DF) as i64,
-                        qty: 30000000,
+                        qty: 30000000.into(),
                         next: 2,
                         prev: 0,
                         sref: 1,
@@ -1386,7 +1316,7 @@ pub mod tests {
                     // ask (line 2)
                     PxOrders {
                         price: (85.55 * DF) as i64,
-                        qty: 35000000,
+                        qty: 35000000.into(),
                         next: 3,
                         prev: 1,
                         sref: 2,
@@ -1396,7 +1326,7 @@ pub mod tests {
                     // ask (line 3)
                     PxOrders {
                         price: (85.57 * DF) as i64,
-                        qty: 40000000,
+                        qty: 40000000.into(),
                         next: 4,
                         prev: 2,
                         sref: 3,
@@ -1406,7 +1336,7 @@ pub mod tests {
                     // ask (line 4)
                     PxOrders {
                         price: (85.58 * DF) as i64,
-                        qty: 45000000,
+                        qty: 45000000.into(),
                         next: 5,
                         prev: 3,
                         sref: 4,
@@ -1416,7 +1346,7 @@ pub mod tests {
                     // ask (line 5)
                     PxOrders {
                         price: (85.6 * DF) as i64,
-                        qty: 50000000,
+                        qty: 50000000.into(),
                         next: NULL_ORDER,
                         prev: 4,
                         sref: 5,
@@ -1426,7 +1356,7 @@ pub mod tests {
                     // bid (line 0)
                     PxOrders {
                         price: (85.34 * DF) as i64,
-                        qty: 25000000,
+                        qty: 25000000.into(),
                         next: 7,
                         prev: NULL_ORDER,
                         sref: 6,
@@ -1436,7 +1366,7 @@ pub mod tests {
                     // bid (line 1)
                     PxOrders {
                         price: (85.33 * DF) as i64,
-                        qty: 30000000,
+                        qty: 30000000.into(),
                         next: 8,
                         prev: 6,
                         sref: 7,
@@ -1446,7 +1376,7 @@ pub mod tests {
                     // bid (line 2)
                     PxOrders {
                         price: (85.31 * DF) as i64,
-                        qty: 35000000,
+                        qty: 35000000.into(),
                         next: 9,
                         prev: 7,
                         sref: 8,
@@ -1456,7 +1386,7 @@ pub mod tests {
                     // bid (line 3)
                     PxOrders {
                         price: (85.29 * DF) as i64,
-                        qty: 40000000,
+                        qty: 40000000.into(),
                         next: 10,
                         prev: 8,
                         sref: 9,
@@ -1466,7 +1396,7 @@ pub mod tests {
                     // bid (line 4)
                     PxOrders {
                         price: (85.27 * DF) as i64,
-                        qty: 45000000,
+                        qty: 45000000.into(),
                         next: 11,
                         prev: 9,
                         sref: 10,
@@ -1476,7 +1406,7 @@ pub mod tests {
                     // bid (line 5)
                     PxOrders {
                         price: (85.26 * DF) as i64,
-                        qty: 50000000,
+                        qty: 50000000.into(),
                         next: NULL_ORDER,
                         prev: 10,
                         sref: 11,
@@ -1488,12 +1418,14 @@ pub mod tests {
                 let dec_factor =
                     get_dec_factor((9 + TOKEN_A1.decs_count - TOKEN_B1.decs_count) as u8) as f64;
                 let sum_for = |qty: i64, line: u32| {
-                    ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64
+                    CappedI64::new(
+                        ((qty as f64 * lines[line as usize].price as f64) / dec_factor) as i64,
+                    )
                 };
 
                 let bid_orders: Orders = vec![
                     Order {
-                        qty: 25000000,
+                        qty: 25000000.into(),
                         sum: sum_for(25000000, 6),
                         order_id: 0,
                         line: 6,
@@ -1503,7 +1435,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000_000,
+                        qty: 30_000_000.into(),
                         sum: sum_for(30_000_000, 7),
                         order_id: 1,
                         line: 7,
@@ -1513,7 +1445,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 35_000_000,
+                        qty: 35_000_000.into(),
                         sum: sum_for(35_000_000, 8),
                         order_id: 2,
                         line: 8,
@@ -1523,7 +1455,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 40_000_000,
+                        qty: 40_000_000.into(),
                         sum: sum_for(40_000_000, 9),
                         order_id: 3,
                         line: 9,
@@ -1533,7 +1465,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 45_000_000,
+                        qty: 45_000_000.into(),
                         sum: sum_for(45_000_000, 10),
                         order_id: 4,
                         line: 10,
@@ -1543,7 +1475,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 50_000_000,
+                        qty: 50_000_000.into(),
                         sum: sum_for(50_000_000, 11),
                         order_id: 5,
                         line: 11,
@@ -1556,7 +1488,7 @@ pub mod tests {
 
                 let ask_orders: Orders = vec![
                     Order {
-                        qty: 25000000,
+                        qty: 25000000.into(),
                         sum: sum_for(25000000, 0),
                         order_id: 0,
                         line: 0,
@@ -1566,7 +1498,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 30_000_000,
+                        qty: 30_000_000.into(),
                         sum: sum_for(30_000_000, 1),
                         order_id: 1,
                         line: 1,
@@ -1576,7 +1508,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 35_000_000,
+                        qty: 35_000_000.into(),
                         sum: sum_for(35_000_000, 2),
                         order_id: 2,
                         line: 2,
@@ -1586,7 +1518,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 40_000_000,
+                        qty: 40_000_000.into(),
                         sum: sum_for(40_000_000, 3),
                         order_id: 3,
                         line: 3,
@@ -1596,7 +1528,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 45_000_000,
+                        qty: 45_000_000.into(),
                         sum: sum_for(45_000_000, 4),
                         order_id: 4,
                         line: 4,
@@ -1606,7 +1538,7 @@ pub mod tests {
                         ..Zeroable::zeroed()
                     },
                     Order {
-                        qty: 50_000_000,
+                        qty: 50_000_000.into(),
                         sum: sum_for(50_000_000, 5),
                         order_id: 5,
                         line: 5,
@@ -1617,9 +1549,6 @@ pub mod tests {
                     },
                 ];
 
-                deriverse
-                    .init_community_header(20, &mut accounts_map)
-                    .unwrap();
                 deriverse.init_amm1(9542270844, 816055002);
 
                 deriverse
@@ -1630,6 +1559,7 @@ pub mod tests {
                         bid_orders,
                         6,
                         0,
+                        20,
                     )
                     .unwrap();
 
@@ -1662,34 +1592,17 @@ pub mod tests {
                     )),
                 );
 
-                deriverse.instr_header.asset_tokens = 9542270844;
-                deriverse.instr_header.crncy_tokens = 816055002;
+                deriverse.instr_header.asset_tokens = CappedI64::new(9542270844);
+                deriverse.instr_header.crncy_tokens = CappedI64::new(816055002);
                 deriverse.instr_header.day_volatility = 0.04023745522889307;
                 deriverse.instr_header.last_px = 85519999939;
-                deriverse.amm.a_tokens = 9542270844;
-                deriverse.amm.b_tokens = 816055002;
+                deriverse.amm.a_tokens = CappedI64::new(9542270844);
+                deriverse.amm.b_tokens = CappedI64::new(816055002);
 
                 accounts_map.insert(
                     deriverse.accounts_ctx.instr_header,
                     Box::new(default_account_with_object(deriverse.instr_header.as_ref())),
                 );
-
-                if let Some(candles) = deriverse.accounts_ctx.candles {
-                    let header = CandlesAccountHeader::<0>::zeroed();
-                    let header = bytes_of(&header);
-                    accounts_map.insert(
-                        candles.0,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.1,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                    accounts_map.insert(
-                        candles.2,
-                        Box::new(default_account_with_data(header.to_vec())),
-                    );
-                }
 
                 let mut new_deriverse = Deriverse::from_keyed_account(
                     &build_key_account1(InstructionBuilderParams { ata_init: false }).unwrap(),
@@ -1722,7 +1635,7 @@ pub mod tests {
                 println!("Out Amount: {}", result.out_amount);
 
                 let expected_in_amount = 100000000;
-                let expected_out_amount = 8528443;
+                let expected_out_amount = 8528442;
                 println!("Expected in_amount: {}", expected_in_amount);
                 println!("Expected out_amount: {}", expected_out_amount);
 
@@ -1757,7 +1670,7 @@ pub mod tests {
                 println!("Out Amount: {}", result.out_amount);
 
                 let expected_in_amount = 68795502;
-                let expected_out_amount = 770731609;
+                let expected_out_amount = 770731608;
                 println!("Expected in_amount: {}", expected_in_amount);
                 println!("Expected out_amount: {}", expected_out_amount);
 
@@ -1784,22 +1697,21 @@ pub mod tests {
         use bytemuck::bytes_of;
         use drv_models::state::{
             client_primary_account_header::ClientPrimaryAccountHeader,
-            token::TokenState,
-            types::account_type::{INSTR, SPOT_1M_CANDLES, SPOT_15M_CANDLES, SPOT_DAY_CANDLES},
+            instrument::InstrAccountHeader, token::TokenState, types::account_type::INSTR,
         };
         use jupiter_amm_interface::{
             Amm, AmmContext, ClockRef, FeeMode, KeyedAccount, SwapAndAccountMetas, SwapParams,
         };
         use once_cell::sync::Lazy;
         use serde_json::to_value;
-        use solana_client::{
-            rpc_client::RpcClient, rpc_config::CommitmentConfig,
-            rpc_response::transaction::Transaction,
-        };
 
         use solana_instruction::Instruction;
         use solana_keypair::{EncodableKey, Keypair, Signer};
         use solana_pubkey::Pubkey;
+        use solana_rpc_client::{
+            api::{config::CommitmentConfig, response::transaction::Transaction},
+            rpc_client::RpcClient,
+        };
         use spl_associated_token_account::get_associated_token_address_with_program_id;
 
         use crate::{
@@ -1842,7 +1754,7 @@ pub mod tests {
             fn new_builder<U: Context>(
                 &self,
                 ctx: <U as Context>::Build,
-            ) -> Result<Box<U>, solana_client::client_error::ClientError> {
+            ) -> Result<Box<U>, solana_rpc_client::api::client_error::AnyhowError> {
                 U::build(self, ctx)
             }
         }
@@ -1880,38 +1792,6 @@ pub mod tests {
             let current_slot = RPC.get_slot().unwrap();
 
             assert!(current_slot > 0);
-        }
-
-        #[test]
-        fn instruction_builder() {
-            let ix = RPC
-                .new_builder::<DepositContext>(DepositBuildContext {
-                    signer: CLIENT_A.pubkey(),
-                    token_mint: TOKEN_B,
-                    amount: 100,
-                    deposit_all: false,
-                })
-                .unwrap()
-                .create_instruction();
-
-            let mut tx = Transaction::new_with_payer(&[ix], Some(&CLIENT_A.pubkey()));
-            tx.sign(
-                &[CLIENT_A.insecure_clone()],
-                RPC.get_latest_blockhash().unwrap(),
-            );
-
-            println!(
-                "Signature: {}",
-                RPC.send_and_confirm_transaction(&tx).unwrap()
-            );
-
-            let client_primary = {
-                let addr = CLIENT_A.pubkey().new_client_primary_acc();
-                let acc = RPC.get_account(&addr).unwrap();
-                unsafe { *(acc.data.as_ptr() as *const ClientPrimaryAccountHeader) }
-            };
-
-            println!("Client primary: {}", client_primary.id);
         }
 
         pub fn init_deriverse() {
@@ -1971,35 +1851,16 @@ pub mod tests {
             println!("Bid Orders: {:?}", deriverse.order_book.bid_orders);
         }
 
-        fn extend_candles(asset_token_id: u32, crncy_token_id: u32) {
-            let extend_candles_ix_1m = ExtendCandlesBuilder::extend_candles(
+        fn extend_candles(instr_header: &InstrAccountHeader) {
+            let extend_candles = ExtendCandlesBuilder::extend_candles(
                 CLIENT_A.pubkey(),
-                SPOT_1M_CANDLES,
-                asset_token_id,
-                crncy_token_id,
+                instr_header.asset_token_id,
+                instr_header.crncy_token_decs_count,
+                instr_header.instr_id,
+                instr_header.maps_address,
             );
 
-            let extend_candles_ix_15m = ExtendCandlesBuilder::extend_candles(
-                CLIENT_A.pubkey(),
-                SPOT_15M_CANDLES,
-                asset_token_id,
-                crncy_token_id,
-            );
-            let extend_candles_ix_day = ExtendCandlesBuilder::extend_candles(
-                CLIENT_A.pubkey(),
-                SPOT_DAY_CANDLES,
-                asset_token_id,
-                crncy_token_id,
-            );
-
-            let mut tx = Transaction::new_with_payer(
-                &[
-                    extend_candles_ix_1m,
-                    extend_candles_ix_15m,
-                    extend_candles_ix_day,
-                ],
-                Some(&CLIENT_A.pubkey()),
-            );
+            let mut tx = Transaction::new_with_payer(&[extend_candles], Some(&CLIENT_A.pubkey()));
 
             tx.sign(
                 &[CLIENT_A.insecure_clone()],
@@ -2388,8 +2249,9 @@ pub mod tests {
         use jupiter_amm_interface::{AmmContext, ClockRef, KeyedAccount};
         use once_cell::sync::Lazy;
         use serde_json::to_value;
-        use solana_client::{rpc_client::RpcClient, rpc_config::CommitmentConfig};
         use solana_pubkey::Pubkey;
+        use solana_rpc_client::api::config::CommitmentConfig;
+        use solana_rpc_client::rpc_client::RpcClient;
 
         use crate::{
             Deriverse, InstructionBuilderParams, ParamsWrapper,

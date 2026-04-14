@@ -7,21 +7,22 @@ use drv_models::{
         instrument::InstrAccountHeader,
         token::TokenState,
         types::{
-            OrderType,
+            CappedI64, OrderType,
             account_type::{
-                COMMUNITY, INSTR, ROOT, SPOT_1M_CANDLES, SPOT_15M_CANDLES, SPOT_ASK_ORDERS,
-                SPOT_ASKS_TREE, SPOT_BID_ORDERS, SPOT_BIDS_TREE, SPOT_CLIENT_INFOS,
-                SPOT_CLIENT_INFOS2, SPOT_DAY_CANDLES, SPOT_LINES,
+                COMMUNITY, INSTR, ROOT, SPOT_ASK_ORDERS, SPOT_ASKS_TREE, SPOT_BID_ORDERS,
+                SPOT_BIDS_TREE, SPOT_CLIENT_INFOS, SPOT_LINES,
             },
         },
     },
 };
 use solana_instruction::{AccountMeta, Instruction};
 use solana_pubkey::Pubkey;
+use solana_rpc_client::api::client_error::AnyhowError;
+use solana_rpc_client::rpc_client::RpcClient;
 
 use crate::{
     custom_sdk::traits::{BuildContext, Context},
-    helper::{Helper, get_dec_factor},
+    helper::{CappedNumber, Helper, get_dec_factor},
     program_id,
 };
 
@@ -48,10 +49,6 @@ pub struct NewSpotOrderContext {
     lines: Pubkey,
     maps: Pubkey,
     client_info: Pubkey,
-    client_info2: Pubkey,
-    candles_1m: Pubkey,
-    candles_15m: Pubkey,
-    candles_day: Pubkey,
     community: Pubkey,
     a_token_state: TokenState,
     instr_state: InstrAccountHeader,
@@ -62,10 +59,7 @@ pub struct NewSpotOrderContext {
 impl Context for NewSpotOrderContext {
     type Build = NewSpotOrderBuildContext;
 
-    fn build(
-        rpc: &solana_client::rpc_client::RpcClient,
-        build_ctx: Self::Build,
-    ) -> Result<Box<Self>, solana_client::client_error::ClientError> {
+    fn build(rpc: &RpcClient, build_ctx: Self::Build) -> Result<Box<Self>, AnyhowError> {
         let NewSpotOrderBuildContext {
             signer,
             token_a_mint,
@@ -110,14 +104,6 @@ impl Context for NewSpotOrderContext {
                 a_token_state.id,
                 b_token_state.id,
             ),
-            client_info2: Pubkey::new_spot_acc(
-                SPOT_CLIENT_INFOS2,
-                a_token_state.id,
-                b_token_state.id,
-            ),
-            candles_1m: Pubkey::new_spot_acc(SPOT_1M_CANDLES, a_token_state.id, b_token_state.id),
-            candles_15m: Pubkey::new_spot_acc(SPOT_15M_CANDLES, a_token_state.id, b_token_state.id),
-            candles_day: Pubkey::new_spot_acc(SPOT_DAY_CANDLES, a_token_state.id, b_token_state.id),
             community: Pubkey::new_acc(COMMUNITY),
             a_token_state,
             instr_state,
@@ -140,10 +126,7 @@ impl Context for NewSpotOrderContext {
             lines,
             maps,
             client_info,
-            client_info2,
-            candles_1m,
-            candles_15m,
-            candles_day,
+
             community,
             a_token_state,
 
@@ -215,26 +198,6 @@ impl Context for NewSpotOrderContext {
                 is_writable: true,
             },
             AccountMeta {
-                pubkey: *client_info2,
-                is_signer: false,
-                is_writable: true,
-            },
-            AccountMeta {
-                pubkey: *candles_1m,
-                is_signer: false,
-                is_writable: true,
-            },
-            AccountMeta {
-                pubkey: *candles_15m,
-                is_signer: false,
-                is_writable: true,
-            },
-            AccountMeta {
-                pubkey: *candles_day,
-                is_signer: false,
-                is_writable: true,
-            },
-            AccountMeta {
                 pubkey: *community,
                 is_signer: false,
                 is_writable: false,
@@ -252,7 +215,7 @@ impl Context for NewSpotOrderContext {
             tag: NewSpotOrderInstruction::INSTRUCTION_NUMBER,
             order_type: OrderType::Limit as u8,
             instr_id: instr_state.instr_id,
-            amount: qty,
+            amount: CappedI64::new(qty),
             side: if qty > 0 { 0 } else { 1 },
             price: (price * DF) as i64,
             ..NewSpotOrderData::zeroed()

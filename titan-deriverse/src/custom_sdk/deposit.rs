@@ -2,18 +2,21 @@ use bytemuck::Zeroable;
 use drv_models::{
     instruction_constants::{DepositInstruction, DrvInstruction},
     instruction_data::DepositData,
-    state::{token::TokenState, types::account_type::ROOT},
+    state::{
+        token::TokenState,
+        types::{CappedI64, account_type::ROOT},
+    },
 };
-use solana_client::rpc_client::RpcClient;
 use solana_instruction::{AccountMeta, Instruction};
 use solana_pubkey::Pubkey;
 
+use solana_rpc_client::rpc_client::RpcClient;
 use spl_associated_token_account::get_associated_token_address_with_program_id;
 
 use crate::{
     Helper,
     custom_sdk::traits::{BuildContext, Context},
-    helper::get_dec_factor,
+    helper::{CappedNumber, get_dec_factor},
     program_id,
 };
 
@@ -49,7 +52,7 @@ impl Context for DepositContext {
     fn build(
         rpc: &RpcClient,
         build_ctx: Self::Build,
-    ) -> Result<Box<Self>, solana_client::client_error::ClientError> {
+    ) -> Result<Box<Self>, solana_rpc_client::api::client_error::AnyhowError> {
         let DepositBuildContext {
             signer,
             token_mint,
@@ -184,7 +187,7 @@ impl Context for DepositContext {
         let instruction_data = DepositData {
             tag: DepositInstruction::INSTRUCTION_NUMBER,
             token_id: token_state.id,
-            amount: qty,
+            amount: CappedI64::new(qty),
             deposit_all: *deposit_all as u8,
             lut_slot: *lut_slot as u32,
             ..DepositData::zeroed()

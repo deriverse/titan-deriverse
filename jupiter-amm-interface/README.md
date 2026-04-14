@@ -1,6 +1,6 @@
 # Jupiter AMM interface
 
-Rust crate for the `Amm` trait to integrate with dflow-core.
+Rust crate for the `Amm` trait.
 
 ## Integration Overview
 

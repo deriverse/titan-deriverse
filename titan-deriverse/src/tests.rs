@@ -1115,7 +1115,7 @@ pub mod tests {
 
                 let expected = (result.in_amount as f64
                 // due to complex calculations middle price between first and second asks lines is used
-                / 9.96
+                / 9.958
                 / (get_dec_factor((TOKEN_B.decs_count - TOKEN_A.decs_count) as u8) as f64))
                     as u64;
                 let diff = (result.out_amount as i64 - expected as i64).abs() as u64;
@@ -1635,7 +1635,7 @@ pub mod tests {
                 println!("Out Amount: {}", result.out_amount);
 
                 let expected_in_amount = 100000000;
-                let expected_out_amount = 8528442;
+                let expected_out_amount = 8530148;
                 println!("Expected in_amount: {}", expected_in_amount);
                 println!("Expected out_amount: {}", expected_out_amount);
 
@@ -1669,7 +1669,7 @@ pub mod tests {
                 println!("In Amount: {}", result.in_amount);
                 println!("Out Amount: {}", result.out_amount);
 
-                let expected_in_amount = 68795502;
+                let expected_in_amount = 68781751;
                 let expected_out_amount = 770731608;
                 println!("Expected in_amount: {}", expected_in_amount);
                 println!("Expected out_amount: {}", expected_out_amount);

@@ -1,135 +1,115 @@
-# Titan-Deriverse Integration
+# Titan V3 Venue Program Template
 
-A Titan aggregator integration for the Deriverse protocol.
+Standalone exact-in Anchor template for integrating a venue CPI adapter into
+Titan's router program.
 
-## Internal State Construction
+This template focuses on the venue integration surface:
 
-1. **Derive the key account** using the `key` method. The **key** account for Deriverse is an instrument account PDA derived from a pair of token mints (mint order matters).
+- `initialize` creates the TitanPDA route signer.
+- `swap_route_v3` validates venue CPI accounts, TitanPDA custody, and route-leg
+  serialization in the same shape Titan's router expects.
+- `instructions/venues/raydium_amm.rs` is a real runnable Raydium AMM CPI example.
+- `instructions/venues/template.rs` is the placeholder adapter to replace or
+  rename when adding your own venue.
 
-2. **Construct the internal state** using `from_keyed_account`.
+**To add a venue, follow the checklist in
+`programs/titan-v3-venue-template/src/instructions/venues/README.md`.** To see
+what's still left to fill in, run `make scorecard` from the repo root.
 
-3. **Initialize the state** by calling `update`.
+## Build
 
-4. **Get a quote** using `quote` to calculate the expected outcome of a trade.
+```bash
+cargo check --manifest-path program-template/Cargo.toml
+make build-program
+```
 
-## Quote Examples
+## Route Instruction Interface
 
-For a Deriverse instrument pair with `asset: TOKEN_A` and `currency: TOKEN_B`:
-
-**Example 1: Swap TOKEN_A → TOKEN_B**
-- Trade: 10 TOKEN_A → TOKEN_B
-- Quote params:
-  - `input_mint`: TOKEN_A
-  - `output_mint`: TOKEN_B
-  - `amount`: `10 * 10^TOKEN_A.decimals`
-
-**Example 2: Swap TOKEN_B → TOKEN_A**
-- Trade: 10 TOKEN_B → TOKEN_A
-- Quote params:
-  - `input_mint`: TOKEN_B
-  - `output_mint`: TOKEN_A
-  - `amount`: `10 * 10^TOKEN_B.decimals`
-
-## Instruction Data
-
-The swap instruction includes a Deriverse variant:
+The entrypoint keeps the single-byte discriminator and exposes only the fields
+needed to exercise Titan router account layout:
 
 ```rust
-pub enum Swap {
-    // ... other variants
-    Deriverse {
-        side: Side,
-        instr_id: u32,
-    },
-}
+#[instruction(discriminator = [42])]
+pub fn swap_route_v3<'info>(
+    ctx: Context<'_, '_, 'info, 'info, SwapRouteV3<'info>>,
+    amount: u64,
+    mints: u8,
+    swaps: Vec<SwapSpecInputV2>,
+) -> Result<()>
 ```
-`jupiter-amm-interface` copy contains extended `Swap` enum
 
-The instruction data can be built using `lib::from_swap`.
+This template only models exact-in execution: `amount` is the exact input amount
+the router will spend.
 
-## Usage Example
+## Remaining Accounts Layout
+
+`swap_route_v3` expects remaining accounts in this order:
+
+Fixed accounts include three optional route slots before `remaining_accounts`.
+Pass this program id for any unused optional slot.
+
+```text
+[0..mints]         TitanPDA token accounts, one per route mint
+[mints..2*mints]  mint accounts, aligned with the ATAs above
+[2*mints..N]      venue CPI accounts for each swap leg
+```
+
+For each swap leg:
+
+- `n_accounts` is the number of venue accounts for that leg.
+- `n_accounts` must include the venue program id as the final account.
+- The router passes all `n_accounts` accounts to `invoke_signed`.
+- The router passes only the first `n_accounts - 1` accounts as `AccountMeta`s to the venue module.
+
+The off-chain builder `swap_route::build_swap_leg` (in the root crate) assembles
+these for you — clearing the TitanPDA signer flag, appending the venue program id,
+and setting `n_accounts`.
+
+## Swap Simulation Test
+
+The template ships a LiteSVM integration test that executes swaps through
+`swap_route_v3` using a venue's off-chain builder and checks the simulated output
+against the venue's quote, in every declared direction. Two entry points run the same
+shared suite (`tests/common/mod.rs`):
+
+- `tests/example_route.rs` — the Raydium AMM reference.
+- `tests/your_venue_route.rs` — your venue (fill in its pool + program id).
+
+They **skip** unless their prerequisites are present: `SOLANA_RPC_URL`, the built
+program binary at `target/deploy/titan_v3_venue_template.so` (from `anchor
+build`), and a dump of each venue program (auto-dumped into `program-dumps/` on
+first run).
+
+```bash
+make build-program
+SOLANA_RPC_URL=<mainnet-rpc-url> cargo test --manifest-path program-template/Cargo.toml --release --test example_route -- --nocapture
+```
+
+Or run the example and your venue suites separately from the repo root with
+`make test-example` and `make test-venue`.
+
+## Raydium AMM Example
+
+`raydium_amm.rs` is intentionally simple and real, and shows the exact
+responsibility of a venue module: serialize the CPI instruction data and forward
+the account metas in the order produced off-chain.
+
 ```rust
-fn build_key_account() -> KeyedAccount {
-    let a_token_state = {
-        let addr = TOKEN_A.new_token_acc();
-        let acc = RPC.get_account(&addr).unwrap();
-        unsafe { *(acc.data.as_ptr() as *const TokenState) }
-    };
+pub const PROGRAM_ID: Pubkey = pubkey!("675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 
-    let b_token_state = {
-        let addr = TOKEN_B.new_token_acc();
-        let acc = RPC.get_account(&addr).unwrap();
-        unsafe { *(acc.data.as_ptr() as *const TokenState) }
-    };
+pub fn swap_base_in_v2(
+    amount_in: u64,
+    account_metas: &[AccountMeta],
+) -> Result<Vec<Instruction>> {
+    let mut data = Vec::with_capacity(17);
+    data.push(16);
+    data.extend_from_slice(&amount_in.to_le_bytes());
+    data.extend_from_slice(&0u64.to_le_bytes());
 
-    let keyd_addr = Pubkey::new_spot_acc(INSTR, a_token_state.id, b_token_state.id);
-    let keyd_acc = RPC.get_account(&keyd_addr).unwrap();
-
-    KeyedAccount {
-        key: keyd_addr,
-        account: keyd_acc,
-        params: None,
-    }
+    Ok(vec![Instruction {
+        program_id: PROGRAM_ID,
+        accounts: account_metas.to_vec(),
+        data,
+    }])
 }
-
- let mut deriverse = Deriverse::from_keyed_account(
-     &build_key_account,
-     &AmmContext {
-         clock_ref: ClockRef::default(),
-     },
- )
- .unwrap();
- 
- let accounts_to_update = deriverse.get_accounts_to_update();
- 
- // load accounts to accounts_map
- 
- deriverse.update(&accounts_map).unwrap();
- 
- let in_amount = get_dec_factor(deriverse.b_token_state.mask.decimals()) as u64;
-
- let quote_result = deriverse
-     .quote(&jupiter_amm_interface::QuoteParams {
-         amount: in_amount,
-         input_mint: TOKEN_A,
-         output_mint: TOKEN_B,
-         swap_mode: jupiter_amm_interface::SwapMode::ExactIn,
-     })
-     .unwrap();
-```
-
-### Swap Referral Program
-
-The **Swap Referral Program** allows aggregators to earn fees from each swap instruction they originate.  
-
-**Parameters:**
-- `fee_rate_factor` — must be less than `0.0002` (automatically aligned by the platform).  
-- `fees_taker_ata` — the associated token account of the fee taker.  
-
-All parameters are passed during **Deriverse initialization** via the `KeydAccount.params` field.    
-
-### Dynamic Account Count
-
-The minimum number of accounts required for a swap instruction has been reduced. The size and sequence of account metas can now vary based on input parameters. See `get_swap_and_account_metas` for details.
-
-### Is Active
-
-The system program account has been removed from the integration. The design allows the platform to prohibit allocations when needed. 
-
-**Common error:** non-preallocated candle buffers — allocate them via `extend_candles` if required.
-
-## Testing
-1. Execute only off chain tests
-```bash
-cargo test
-```
-
-2. Execute rpc tests
-```bash
-cargo test --features "rpc-test"
-```
-
-3. Execute rpc tests
-```bash
-cargo test --features "mainnet-test"
 ```
